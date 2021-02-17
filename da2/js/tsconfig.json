@@ -1,0 +1,9 @@
+{
+    "compilerOptions": {
+        "outDir": "./",
+        "module": "es6",
+        "removeComments": true,
+        "sourceMap": true
+    },
+    "exclude": [],
+}
