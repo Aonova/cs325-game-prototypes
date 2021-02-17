@@ -82,7 +82,9 @@ var Hex = (function () {
         this.pos = pos;
         var sPos = Hex.hexToScreenPos(brd.center, brd.radius, this.pos);
         this.object = brd.scene.add.polygon(sPos.x, sPos.y, hexPoints(brd.radius))
-            .setOrigin(0, 0).setVisible(true).setScale(1, 1).setFillStyle(0x8888ff, 0.3);
+            .setOrigin(0, 0).setVisible(true).setFillStyle(0x556655, 0.5).setScale(0.3, 0.9);
+        this.object.setInteractive(this.object.geom, Phaser.Geom.Polygon.Contains);
+        this.setState(HexState.normal);
     }
     Hex.hexToScreenPos = function (center, rad, hPos) {
         var pos = { x: center.x, y: center.y };
@@ -91,33 +93,26 @@ var Hex = (function () {
         return pos;
     };
     Hex.prototype.setState = function (state) {
-        var _this = this;
         var brd = this.board;
+        var self = this;
         switch (state) {
             case HexState.normal:
-                this.object.setActive(true).off('pointerover').off('pointerout').setScale(0.9, 0.9)
-                    .on('pointerover', function () {
-                    _this.board.scene.tweens.add({ targets: _this.object,
-                        fillColor: _this.board.theme.normal.rgb,
-                        fillAlpha: _this.board.theme.normal.a,
-                        scale: 0.9,
-                        duration: 400
-                    });
-                })
-                    .on('pointerout', function () {
-                    _this.board.scene.tweens.add({ targets: _this.object,
-                        fillColor: _this.board.theme.warm.rgb,
-                        fillAlpha: _this.board.theme.warm.a,
-                        scale: 1,
-                        duration: 400
-                    });
-                })
-                    .setVisible(true);
+                this.object.setActive(true).setVisible(true).off('pointerover').off('pointerout')
+                    .on('pointerout', function () { Hex.popTween(self.object, 0.9, 0.5); })
+                    .on('pointerover', function () { Hex.popTween(self.object, 0.95, 0.8); });
                 break;
             default:
                 break;
         }
         this.state = state;
+    };
+    Hex.popTween = function (object, scale, alpha) {
+        object.scene.tweens.add({ targets: object,
+            fillAlpha: alpha,
+            scale: scale,
+            duration: 300,
+            ease: 'sine'
+        });
     };
     return Hex;
 }());
@@ -141,7 +136,7 @@ var Demo = (function (_super) {
     __extends(Demo, _super);
     function Demo() {
         var _this = _super.call(this, 'demo') || this;
-        _this.rad = 40;
+        _this.rad = 43;
         _this.size = 3;
         _this.center = { x: 400, y: 300 };
         return _this;

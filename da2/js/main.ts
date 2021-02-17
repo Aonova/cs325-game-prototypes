@@ -110,10 +110,10 @@ class Hex{
         this.pos = pos
         let sPos = Hex.hexToScreenPos(brd.center,brd.radius,this.pos) 
         this.object = brd.scene.add.polygon(sPos.x,sPos.y,hexPoints(brd.radius))
-            .setOrigin(0,0).setVisible(true).setScale(1,1).setFillStyle(0x8888ff,0.3)
-        //this.object.setInteractive(this.object.geom,Phaser.Geom.Polygon.Contains)
+            .setOrigin(0,0).setVisible(true).setFillStyle(0x556655,0.5).setScale(0.9,0.9)
+        this.object.setInteractive(this.object.geom,Phaser.Geom.Polygon.Contains)
 
-        //this.setState(HexState.normal)
+        this.setState(HexState.normal)
     }
     /** Converts a hex xyz position to top-left-origin 2d coordinates.*/
     static hexToScreenPos(center:Vec2,rad:number,hPos:Vec3) : Vec2 {
@@ -125,35 +125,27 @@ class Hex{
     /** Changes state of the hex, affecting interactivity and visuals */
     setState(state:HexState) {
         let brd = this.board
+        var self = this
         switch (state) {
             case HexState.normal:
-                this.object.setActive(true).off('pointerover').off('pointerout').setScale(0.9,0.9)
-                .on('pointerover', ()=>{
-                    this.board.scene.tweens.add(
-                        { targets: this.object, 
-                            fillColor: this.board.theme.normal.rgb, 
-                            fillAlpha: this.board.theme.normal.a,
-                            scale: 0.9,
-                            duration: 400
-                        }
-                    )
-                })
-                .on('pointerout', ()=>{
-                    this.board.scene.tweens.add(
-                        { targets: this.object, 
-                            fillColor: this.board.theme.warm.rgb, 
-                            fillAlpha: this.board.theme.warm.a,
-                            scale: 1,
-                            duration: 400
-                        }
-                    )
-                })
-                .setVisible(true)
+                this.object.setActive(true).setVisible(true).off('pointerover').off('pointerout')
+                .on('pointerout', () => {Hex.popTween(self.object,0.9,0.5)})
+                .on('pointerover', () => {Hex.popTween(self.object,0.95,0.8)})
                 break
             default:
                 break
         }
         this.state = state
+    }
+    static popTween(object:Polygon,scale:number,alpha:number) {
+        object.scene.tweens.add(
+            { targets: object, 
+                fillAlpha: alpha,
+                scale: scale,
+                duration: 300,
+                ease: 'sine'
+            }
+        )
     }
 
 }
@@ -182,7 +174,7 @@ function hexPoints(rad:number): Vec2[] {
 }
 class Demo extends Phaser.Scene {
     /** Side length and circum-circle radius of a hex. Should geometrically match apothem.*/
-    rad:number = 40
+    rad:number = 43
     /** Number of rings on the hex board. Effectively controls size of board in hexes.*/
     size:integer = 3
     /** Center of the hex board as a location on the scene (= pixels barring camera movement).*/
