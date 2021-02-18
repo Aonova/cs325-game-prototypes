@@ -17,9 +17,9 @@ type Ellipse = Phaser.GameObjects.Ellipse
 /** Directions corresponding to edges of a hexagon */
 enum Dir { NE, E, SE, SW, W, NW }
 /** Tile types specific to Royal Ambush */
-enum TileType { start, escape, normal }
+enum HexType { start, escape, normal }
 /** Unit types specific to Royal Ambush */
-enum UnitType { merc, guard, king}
+enum UnitType { merc, guard, king }
 /** Color theme for the board specific to Royal Ambush. Numbers are values from 0-0xffffff*/
 type BoardColor = {
     normal: number
@@ -40,8 +40,8 @@ class HexBoard{
         normal: 0x444444,
         start: 0x667799,
         escape: 0x669966,
-        ambusher: 0xbb5555,
-        royalty: 0x5555bb
+        ambusher: 0x663333,
+        royalty: 0x7777dd
     }
     /** Center of the hex board as a position in the scene */
     center: Vec2
@@ -77,9 +77,9 @@ class HexBoard{
             for (let y=-this.size;y<=this.size;y++) {
                 for (let z=-this.size;z<=this.size;z++) {
                     if (x+y+z == 0){ // Only add hexes within the rings 
-                        let type = TileType.normal
-                        if ( x*y*z==0 && (Math.abs(x)+Math.abs(y)+Math.abs(z)) == 2*this.size) type = TileType.escape
-                        else if (x==0 && y==0 && z==0) type = TileType.start 
+                        let type = HexType.normal
+                        if ( x*y*z==0 && (Math.abs(x)+Math.abs(y)+Math.abs(z)) == 2*this.size) type = HexType.escape
+                        else if (x==0 && y==0 && z==0) type = HexType.start 
                         this.tiles[`${x},${y},${z}`] = new Hex(this, {x:x,y:y,z:z}, type)
                     }
                 }
@@ -107,6 +107,23 @@ class HexBoard{
             return (<Hex>this.tiles[`${p.x},${p.y},${p.z}`])
         }
     }
+    /** Removes all hexes and units gracefully over a second or so */
+    clear() {
+        for (let x=-this.size;x<=this.size;x++) {
+            for (let y=-this.size;y<=this.size;y++) {
+                for (let z=-this.size;z<=this.size;z++) {
+                    if (x+y+z == 0){ // Only add hexes within the rings 
+                        let ringNum = Math.max(Math.abs(x),Math.abs(y),Math.abs(z))
+                        this.scene.time.delayedCall(
+                            ringNum*250,
+                            ()=>{this.tiles[`${x},${y},${z}`].remove()},[],
+                            this
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 /** Returns a clone of a vector object. */
 function cloneVec(vec: Vec3) : Vec3 {
@@ -123,37 +140,40 @@ enum HexState {
     dim
 }
 /** Hex tiles as a part of a hex board */
-class Hex{
-    /** The object representing the physical hex in the world */
-    object:Polygon
+class Hex extends Phaser.GameObjects.Polygon {
     /** Position on hex grid, using hex x, y, z axises */
-    pos: {x:integer,y:integer,z:integer}
+    hPos: {x:integer,y:integer,z:integer}
     /** The parent board this tile belongs to.*/
     board: HexBoard
     /** Hex type, under the rules of the game */
-    type: TileType = TileType.normal
-    /** State of the tile, determining response and grabbing behavior. */
-    state: HexState = HexState.normal
+    hType: HexType = HexType.normal
+    /** State of the tile, determining visuals and interactivity. */
+    hState: HexState = HexState.normal
     /** 
      * Creates new hex, and backing polygon.
      * @param board The hex board under which this hex tile is being made
      * @param pos The position of this tile on the board in xyz hex coordinates. 
      */
-    constructor(board:HexBoard,pos:Vec3,type:TileType) {
-        let brd = this.board = board
-        this.pos = pos
-        this.type = type
-        let screenPos = Hex.hexToScreenPos(brd.center,brd.radius,this.pos) 
-        this.object = brd.scene.add.polygon(screenPos.x,screenPos.y,hexPoints(brd.radius))
-            .setOrigin(0,0).setVisible(true)
-        switch(type) {
-            case TileType.normal:   this.object.setFillStyle(brd.theme.normal); break;
-            case TileType.escape:   this.object.setFillStyle(brd.theme.escape); break;
-            case TileType.start:    this.object.setFillStyle(brd.theme.start); break;
-        }
-        this.object.setInteractive(this.object.geom,Phaser.Geom.Polygon.Contains)
+    constructor(board:HexBoard,pos:Vec3,type:HexType) {
+        super(board.scene,
+            Hex.hexToScreenPos(board.center,board.radius,pos).x,
+            Hex.hexToScreenPos(board.center,board.radius,pos).y,
+            hexPoints(board.radius)
+        )
+        this.setOrigin(0,0).setScale(0,0).setActive(true).setVisible(true)
+        this.scene.add.existing(this)
+        this.board = board
+        this.hPos = pos
+        this.hType = type
 
-        this.setState(HexState.normal)
+        switch(type) {
+            case HexType.normal:   this.setFillStyle(board.theme.normal); break;
+            case HexType.escape:   this.setFillStyle(board.theme.escape); break;
+            case HexType.start:    this.setFillStyle(board.theme.start); break;
+        }
+        this.setInteractive(this.geom,Phaser.Geom.Polygon.Contains)
+
+        this.setHexState(HexState.normal)
     }
     /**
      * Get neighboring hex on board in the specified direction.
@@ -161,7 +181,7 @@ class Hex{
      * @returns The hex tile neighbor, or null if it's the edge of the board.
      */ 
     getNbr(dir:Dir): Hex {
-        let nbrPos:Vec3 = cloneVec(this.pos)
+        let nbrPos:Vec3 = cloneVec(this.hPos)
         switch (dir) {
             case Dir.NE: nbrPos.z++; nbrPos.y--; break;
             case Dir.E:  nbrPos.x++; nbrPos.y--; break;
@@ -187,28 +207,28 @@ class Hex{
             right:  nbr.getNbr((dir+1)%6)
         }
     }
-    /** Converts a hex xyz position to top-left-origin 2d coordinates.*/
-    static hexToScreenPos(center:Vec2,rad:number,hPos:Vec3) : Vec2 {
-        let pos = {x:center.x,y:center.y}
-        pos.x += ( hPos.x*Math.cos(deg30) - hPos.y*Math.cos(deg30) ) * rad
-        pos.y += ( hPos.x*Math.cos(deg60) + hPos.y*Math.cos(deg60) - hPos.z ) * rad 
-        return pos
-    }
     /** Changes state of the hex, affecting interactivity and visuals */
-    setState(state:HexState) {
+    setHexState(state:HexState): Hex{
         let brd = this.board
         var self = this
         switch (state) {
             case HexState.normal:
-                Hex.popTween(self.object,0.9,0.5)
-                this.object.setActive(true).setVisible(true).off('pointerover').off('pointerout')
-                .on('pointerout', () => {Hex.popTween(self.object,0.9,0.5)})
-                .on('pointerover', () => {Hex.popTween(self.object,0.95,0.8)})
+                Hex.popTween(self,0.9,0.5)
+                this.off('pointerover').off('pointerout')
+                .on('pointerout', () => {Hex.popTween(self,0.9,0.5)})
+                .on('pointerover', () => {Hex.popTween(self,0.95,0.8)})
                 break
+            case HexState.dim:
+                Hex.popTween(self,0.5,0.7)
+                this.off('pointerover').off('pointerout')
             default:
                 break
         }
         this.state = state
+        return this
+    }
+    remove() {
+        Hex.popTween(this,0,this.alpha)
     }
     /** Animation to pop an object to a specified scale and alpha */
     static popTween(object:Polygon,scale:number,alpha:number) {
@@ -221,18 +241,104 @@ class Hex{
             }
         )
     }
+    /** Converts a hex xyz position to top-left-origin 2d coordinates.*/
+    static hexToScreenPos(center:Vec2,rad:number,hPos:Vec3) : Vec2 {
+        let pos = {x:center.x,y:center.y}
+        pos.x += ( hPos.x*Math.cos(deg30) - hPos.y*Math.cos(deg30) ) * rad
+        pos.y += ( hPos.x*Math.cos(deg60) + hPos.y*Math.cos(deg60) - hPos.z ) * rad 
+        return pos
+    }
 
 }
-
+class Label extends Phaser.GameObjects.Image {
+    /** 0=hidden, 1=normal, 2=focused, 3=unfocused */
+    state = 0 
+    show() {
+        this.setY(this.y-this.displayHeight)
+        this.scene.tweens.add({
+            targets: this,
+            y: this.y+this.displayHeight,
+            alpha: 1,
+            ease: 'sine'
+        })
+        this.state=1
+    }
+    hide() {
+        this.scene.tweens.add({
+            targets: this,
+            y: this.y-this.displayHeight,
+            alpha: 0,
+            ease: 'sine'
+        })
+        this.state=0
+    }
+    /** Toggles focus, or sets it according to passed param */
+    focus(focus?:boolean) {
+        if (this.state !in [1,2,3]) return
+        let offset = 0
+        if (focus===undefined) {
+            switch(this.state) {
+                case 1: offset = 0.1; this.state = 2; break;
+                case 2: offset = -0.1; this.state = 1; break;
+                case 3: offset = 0.2; this.state = 2; break;
+            }
+        } else {
+            switch(this.state) {
+                case 1: offset = focus? 0.1 : 0; break;
+                case 2: offset = focus? 0: -0.1; break;
+                case 3: offset = focus? 0.2: 0.1; break;
+            }
+            this.state = focus? 2: 1
+        }
+        this.scene.tweens.add({
+            targets: this,
+            scale: this.scale + offset,
+            alpha: 1,
+            ease: 'sine'
+        })
+    }
+    unfocus(unfocus?:boolean) {
+        if (this.state !in [1,2,3]) return
+        let offset = 0
+        if (unfocus===undefined) {
+            switch(this.state) {
+                case 1: offset = -0.1; this.state = 3; break;
+                case 2: offset = -0.2; this.state = 3; break;
+                case 3: offset = 0.1; this.state = 1; break;
+            }
+        } else {
+            switch(this.state) {
+                case 1: offset = unfocus? -0.1 : 0; break;
+                case 2: offset = unfocus? -0.2: -0.1; break;
+                case 2: offset = unfocus? 0: 0.1; break;
+            }
+            this.state = unfocus? 3: 1
+        }
+        this.scene.tweens.add({
+            targets: this,
+            scale: this.scale + offset,
+            alpha: 1,
+            ease: 'sine'
+        })
+    }
+    constructor(scene:Phaser.Scene,x:number,y:number,tex:string,tint?:number,origin?:Vec2) {
+        super(scene,x,y,tex)
+        if (tint!==undefined) this.setTint(tint)
+        if (origin!==undefined) this.setOrigin
+    }
+}
+class Button extends Label {
+    
+}
 /** Player pieces specific to Royal Ambush */
-class Unit {
-    /** The game object in the scene */
-    object:Ellipse
+class Unit extends Phaser.GameObjects.Image {
     /** The Unit type */
-    type: UnitType
-    /** The current location of the unit on the grid */
-    currentHex:Hex
-    /** Base color  */
+    uType: UnitType
+    /** The current location of the unit on the grid. */
+    Pos: Hex
+    /** Base color */
+
+
 }
 /** x,y points of a hex */
 function hexPoints(rad:number): Vec2[] {

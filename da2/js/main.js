@@ -21,12 +21,12 @@ var Dir;
     Dir[Dir["W"] = 4] = "W";
     Dir[Dir["NW"] = 5] = "NW";
 })(Dir || (Dir = {}));
-var TileType;
-(function (TileType) {
-    TileType[TileType["start"] = 0] = "start";
-    TileType[TileType["escape"] = 1] = "escape";
-    TileType[TileType["normal"] = 2] = "normal";
-})(TileType || (TileType = {}));
+var HexType;
+(function (HexType) {
+    HexType[HexType["start"] = 0] = "start";
+    HexType[HexType["escape"] = 1] = "escape";
+    HexType[HexType["normal"] = 2] = "normal";
+})(HexType || (HexType = {}));
 var UnitType;
 (function (UnitType) {
     UnitType[UnitType["merc"] = 0] = "merc";
@@ -65,11 +65,11 @@ var HexBoard = (function () {
             for (var y = -this.size; y <= this.size; y++) {
                 for (var z = -this.size; z <= this.size; z++) {
                     if (x + y + z == 0) {
-                        var type = TileType.normal;
+                        var type = HexType.normal;
                         if (x * y * z == 0 && (Math.abs(x) + Math.abs(y) + Math.abs(z)) == 2 * this.size)
-                            type = TileType.escape;
+                            type = HexType.escape;
                         else if (x == 0 && y == 0 && z == 0)
-                            type = TileType.start;
+                            type = HexType.start;
                         this.tiles[x + "," + y + "," + z] = new Hex(this, { x: x, y: y, z: z }, type);
                     }
                 }
@@ -102,32 +102,34 @@ var HexState;
     HexState[HexState["bright"] = 1] = "bright";
     HexState[HexState["dim"] = 2] = "dim";
 })(HexState || (HexState = {}));
-var Hex = (function () {
+var Hex = (function (_super) {
+    __extends(Hex, _super);
     function Hex(board, pos, type) {
-        this.type = TileType.normal;
-        this.state = HexState.normal;
-        var brd = this.board = board;
-        this.pos = pos;
-        this.type = type;
-        var screenPos = Hex.hexToScreenPos(brd.center, brd.radius, this.pos);
-        this.object = brd.scene.add.polygon(screenPos.x, screenPos.y, hexPoints(brd.radius))
-            .setOrigin(0, 0).setVisible(true);
+        var _this = _super.call(this, board.scene, Hex.hexToScreenPos(board.center, board.radius, pos).x, Hex.hexToScreenPos(board.center, board.radius, pos).y, hexPoints(board.radius)) || this;
+        _this.hType = HexType.normal;
+        _this.hState = HexState.normal;
+        _this.setOrigin(0, 0).setScale(0, 0).setActive(true).setVisible(true);
+        _this.scene.add.existing(_this);
+        _this.board = board;
+        _this.hPos = pos;
+        _this.hType = type;
         switch (type) {
-            case TileType.normal:
-                this.object.setFillStyle(brd.theme.normal);
+            case HexType.normal:
+                _this.setFillStyle(board.theme.normal);
                 break;
-            case TileType.escape:
-                this.object.setFillStyle(brd.theme.escape);
+            case HexType.escape:
+                _this.setFillStyle(board.theme.escape);
                 break;
-            case TileType.start:
-                this.object.setFillStyle(brd.theme.start);
+            case HexType.start:
+                _this.setFillStyle(board.theme.start);
                 break;
         }
-        this.object.setInteractive(this.object.geom, Phaser.Geom.Polygon.Contains);
-        this.setState(HexState.normal);
+        _this.setInteractive(_this.geom, Phaser.Geom.Polygon.Contains);
+        _this.setHexState(HexState.normal);
+        return _this;
     }
     Hex.prototype.getNbr = function (dir) {
-        var nbrPos = cloneVec(this.pos);
+        var nbrPos = cloneVec(this.hPos);
         switch (dir) {
             case Dir.NE:
                 nbrPos.z++;
@@ -167,26 +169,24 @@ var Hex = (function () {
             right: nbr.getNbr((dir + 1) % 6)
         };
     };
-    Hex.hexToScreenPos = function (center, rad, hPos) {
-        var pos = { x: center.x, y: center.y };
-        pos.x += (hPos.x * Math.cos(deg30) - hPos.y * Math.cos(deg30)) * rad;
-        pos.y += (hPos.x * Math.cos(deg60) + hPos.y * Math.cos(deg60) - hPos.z) * rad;
-        return pos;
-    };
-    Hex.prototype.setState = function (state) {
+    Hex.prototype.setHexState = function (state) {
         var brd = this.board;
         var self = this;
         switch (state) {
             case HexState.normal:
-                Hex.popTween(self.object, 0.9, 0.5);
-                this.object.setActive(true).setVisible(true).off('pointerover').off('pointerout')
-                    .on('pointerout', function () { Hex.popTween(self.object, 0.9, 0.5); })
-                    .on('pointerover', function () { Hex.popTween(self.object, 0.95, 0.8); });
+                Hex.popTween(self, 0.9, 0.5);
+                this.off('pointerover').off('pointerout')
+                    .on('pointerout', function () { Hex.popTween(self, 0.9, 0.5); })
+                    .on('pointerover', function () { Hex.popTween(self, 0.95, 0.8); });
                 break;
+            case HexState.dim:
+                Hex.popTween(self, 0.5, 0.7);
+                this.off('pointerover').off('pointerout');
             default:
                 break;
         }
         this.state = state;
+        return this;
     };
     Hex.popTween = function (object, scale, alpha) {
         object.scene.tweens.add({ targets: object,
@@ -196,8 +196,14 @@ var Hex = (function () {
             ease: 'sine'
         });
     };
+    Hex.hexToScreenPos = function (center, rad, hPos) {
+        var pos = { x: center.x, y: center.y };
+        pos.x += (hPos.x * Math.cos(deg30) - hPos.y * Math.cos(deg30)) * rad;
+        pos.y += (hPos.x * Math.cos(deg60) + hPos.y * Math.cos(deg60) - hPos.z) * rad;
+        return pos;
+    };
     return Hex;
-}());
+}(Phaser.GameObjects.Polygon));
 var Unit = (function () {
     function Unit() {
     }
