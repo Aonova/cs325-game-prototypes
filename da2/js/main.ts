@@ -518,7 +518,7 @@ class Demo extends Phaser.Scene {
         let royalCard = new Label(this,10,10,'card_royalty',{x:0,y:0},this.mainBoard.theme.royalty).setScale(0.6)
         let ambushCard = new Label(this,10,this.cameras.main.height-10,'card_ambusher',{x:0,y:1},this.mainBoard.theme.ambusher).setScale(0.6)
         // TODO: show score text
-        let time = 1400 // initial time taken for making board
+        let time = 1600 // initial time taken for making board
         delay(this,time,this,()=>phaseCard.showGrand(400,500,500)) 
         delay(this,time+=1300,this,()=>royalCard.showGrand(400,500,400))
         delay(this,time+=1300,this,()=>ambushCard.showGrand(400,500,400))
