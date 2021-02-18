@@ -537,7 +537,7 @@ var Demo = (function (_super) {
         var phaseCard = new Label(this, this.cameras.main.width - 10, 10, 'card_deploy', { x: 1, y: 0 }).setScale(0.9);
         var royalCard = new Label(this, 10, 10, 'card_royalty', { x: 0, y: 0 }, this.mainBoard.theme.royalty).setScale(0.6);
         var ambushCard = new Label(this, 10, this.cameras.main.height - 10, 'card_ambusher', { x: 0, y: 1 }, this.mainBoard.theme.ambusher).setScale(0.6);
-        var time = 1400;
+        var time = 1600;
         delay(this, time, this, function () { return phaseCard.showGrand(400, 500, 500); });
         delay(this, time += 1300, this, function () { return royalCard.showGrand(400, 500, 400); });
         delay(this, time += 1300, this, function () { return ambushCard.showGrand(400, 500, 400); });

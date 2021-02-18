@@ -5,10 +5,11 @@
     <title>Digi Assign 2</title>
     <style>
     body
-    {
-        color: #777;
+    {   background-color: black;
+        color: #fff;
         font-family: "Avenir", Verdana, sans-serif;
     }
+    strong,b{color: rgb(255, 208, 0);}
     #readme
     {
         margin-top: 10px;
@@ -16,83 +17,84 @@
     </style>
 </head>
 
-<body>
+<body><div style="width: 1280px; margin:auto">
 <div id="game" style="min-height: 720px;"></div>
-<div id="readme">
-    <h2>Your game title</h2>
-
+<div id="readme" style="width: 1280px;">
+    <h2><b>Royal Ambush</b></h2>
     <ul>
     <li><strong>Originality:</strong>
     What is original about your game?
     </li>
+    <p>The rules of the games are based on an original analogue prototype (described in the short attached document). 
+        Only the first phase of those rules are implemented in this prototype.
+        It is also a 2 player game, requiring players to share the mouse and trade and their turn comes around. 
+    </p>
 
     <li><strong>Technical Merit:</strong>
     What is interesting about your game technology?
     </li>
+    <p>Hex coordinate system, sleek animations and transitions, responsive kinaesthetic, 
+        tile generation and population (could be randomized if the ruleset required to it).
+        dynamic tile-based user functionality, abstract proximity detection. Figuring out how to generate and interact with hex board
+        was actually extremely involved for me, with a lot of manual calculations to make sense of hexagonal x,y,z and relative positioning and logic.
+        Much of my effort was to make a solid foundation of code for any type of game that uses a regular hexagonal tile system -- not just this simple demonstration. 
+    </p>
 
     <li><strong>Prototype Postmortem:</strong>
     What did you learn from this prototype?
     What was the easiest or hardest part of making it?
     </li>
+    <p>Learning the principle design patterns in games the hard way. Thinks like phase loops and control pass-offs between different components.
+        Encapsulating logic and learning the best practices was a big challenge as well. I really tried and immerse myself in learning the "right"
+        way to code a game, rather than taking a bunch of shortcuts and making a one-off demo in a comfy, but non-expandable way. I look forward to
+        implementing the "battle" phase when I get the chance to improve on this prototype. Then we can have an actual win condition and a proper closed loop.
+    </p>
 
     <li><strong>Prototype Assets:</strong>
-    I made all my assets. 
-    <ul>
-    </ul>
     </li>
+    <p>I made all of my assets, using generic photoshop assets and the like.</p>
 
     <li><strong>Prototype Closest Other Game:</strong>
-    Really all the code is completely from scratch. It is written in typescript -- and I extended the classes which made most sense to me,
-    as a new dev in Phaser.
     </li>
+    <p>Really all the code is completely from scratch. It is written in typescript -- and I extended the classes which made most sense to me,
+        as a new dev in Phaser. Technically you could say I started with the minimal template, but rewrote everything.</p>
 
     <li><strong>High Concept:</strong>
-    Fun modern twist on ancient traditional board game
     </li>
+    <p>Fun modern twist on ancient traditional board game 'Tafl'</p>
 
     <li><strong>Theme:</strong>
-    State which of the Storymatic themes you used.
-    </li>
+    </li><p>Challenge: Must be played with someone else/Things are only added, not removed. (Concept was targeting DA 1 challenges but carried over due to delays.)</p>
 
     <li><strong>Mandated Variety:</strong>
-    State which input, randomness, genre, and play style you used in this prototype.
-    </li>
+    </li><p>Input: Mouse, clickable buttons; Randomness: little-to-none; Play-style: Competitor, craftsmen, storyteller; Genre: board game </p>
 
     <li><strong>Prototype Goal:</strong>
-    What game mechanic is this prototype evaluating?
-    </li>
-
-    <li><strong>Player Experience Goals:</strong>
-    What experience do you want players to have when playing your game?
-    </li>
-
-    <li><strong>Gameplay:</strong>
-    A paragraph describing the actions the player can perform, the system dynamics, and the core mechanic. Include a concise explanation of the prototype’s inputs and their expected effects (how to play). You can also describe game play that is not in the prototype. You may include mock-up images for parts of the game not in the prototype.
-    </li>
-
-    <li><iframe src="./docs/royal_ambush.pdf" width="80%" height="500px">
-    </iframe></li>
-
-    <li><strong>Strategies:</strong>
-    What player strategies do you expect will be effective at playing this game?
-    </li>
-
-    <li><strong>Story/Setting/Premise:</strong>
-    A paragraph about the world your game is set in and who the characters are. What makes the game world and its occupants unique and interesting? Do the tokens represent something? If the game has a backstory, mention it here. If the game is abstract, then say so.
-    How will the dramatic tension interact with the gameplay tension?
-    </li>
-
-    <li><strong>Target Audience:</strong>
-    A single sentence that describes the demographic you're trying to reach.
-    </li>
-
+    </li><p>The goals really revolved around demonstrating: two players being able to interact with the same objects on a screen, in a controlled fashion with expected inputs being guided.
+        Visually and logically transferring control among the players and the game loop; interactive hexagonal tile system based on 2.5d x,y,z coordinates.
+        THe "look" and "feel" of a feature-complete game that fully implements the board game rules.</p>
+    <br>
+    <p><b><u>The following are described in more detail in the labeled sections of the attached doc.</u></b></p>
+    <li><strong>Player Experience Goals</strong>
+    </li><br>
+    <li><strong>Gameplay</strong>
+    </li><br>
+    <li><strong>Strategies</strong>
+    </li><br>
+    <li><strong>Story/Setting/Premise</strong>
+    </li><br>
+    <li><strong>Target Audience</strong>
+    Competitive people of all ages, or even those just looking to have a casual battle of wits against their friends. The rules are really simple enough
+    to be accessable to really anyone, though maybe a little too calm and strategic for those you are into skill based games.
+    </li><br>
     <li><strong>Play Time:</strong>
-    How long does your game take to play?
-    </li>
-
+    Each round is very short, less than 2 mins. After fully implementing the second phase, the rounds should be more like 5 mins.
+    </li><br>
+    <li><iframe src="./docs/royal_ambush.pdf" width="1280" height="800px">
+    </iframe></li>
     </ul>
 </div>
-
+</div>
 <!-- main.js must come at the end since it expects the HTML to have been created. -->
 <script src="js/main.js" type="module"></script>
 </body>
