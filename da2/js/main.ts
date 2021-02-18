@@ -588,6 +588,7 @@ class Demo extends Phaser.Scene {
         }
     }
 }
+//something
 
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
