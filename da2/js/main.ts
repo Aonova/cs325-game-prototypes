@@ -15,19 +15,18 @@ type Vec3 = {x:number,y:number,z:number}
 type Polygon = Phaser.GameObjects.Polygon
 type Ellipse = Phaser.GameObjects.Ellipse
 /** Directions corresponding to edges of a hexagon */
-enum HexDir { NE, E, SE, SW, W, NW }
+enum Dir { NE, E, SE, SW, W, NW }
 /** Tile types specific to Royal Ambush */
 enum TileType { start, escape, normal }
 /** Unit types specific to Royal Ambush */
 enum UnitType { merc, guard, king}
-/** Simple Color object: rgb as a hex between 0 and 0xffffff, and alpha from 0-1 */
-type Fill = {rgb:number,a:number}
-/** Color theme for the board specific to Royal Ambush. */
+/** Color theme for the board specific to Royal Ambush. Numbers are values from 0-0xffffff*/
 type BoardColor = {
-    normal: Fill
-    cold: Fill
-    warm: Fill
-    hot: Fill
+    normal: number
+    start: number
+    escape: number
+    ambusher: number
+    royalty: number
 }
 /** Convenient radian value (angle of hex cardinal directions)*/
 const deg60:number = 60*Math.PI/180
@@ -38,10 +37,11 @@ const deg30:number = 30*Math.PI/180
  */
 class HexBoard{
     theme: BoardColor = {
-        normal: {rgb:0x444444,a:0.5},
-        cold: {rgb:0x444466,a:0.7},
-        warm: {rgb:0x664444,a:0.7},
-        hot: {rgb:0x773344,a:0.8}
+        normal: 0x444444,
+        start: 0x667799,
+        escape: 0x669966,
+        ambusher: 0xbb5555,
+        royalty: 0x5555bb
     }
     /** Center of the hex board as a position in the scene */
     center: Vec2
@@ -76,19 +76,51 @@ class HexBoard{
         for (let x=-this.size;x<=this.size;x++) {
             for (let y=-this.size;y<=this.size;y++) {
                 for (let z=-this.size;z<=this.size;z++) {
-                    if (x+y+z == 0) // Only add hexes within the rings 
-                        this.tiles[`${x},${y},${z}`] = new Hex(this,{x:x,y:y,z:z})
+                    if (x+y+z == 0){ // Only add hexes within the rings 
+                        let type = TileType.normal
+                        if ( x*y*z==0 && (Math.abs(x)+Math.abs(y)+Math.abs(z)) == 2*this.size) type = TileType.escape
+                        else if (x==0 && y==0 && z==0) type = TileType.start 
+                        this.tiles[`${x},${y},${z}`] = new Hex(this, {x:x,y:y,z:z}, type)
+                    }
                 }
             }
         }
     }
+    /**
+     * Gets the hex at a certain position on the board. Can use single Vec3, or 3 coordinates.
+     * @param pos Vec3 position of Hex or x position if using y and z.
+     * @param y y position of Hex to get
+     * @param z z position of Hex to get
+     * @returns the Hex at that position or null if it is outside the board.
+     */
+    get(pos:Vec3|integer,y?:integer,z?:integer) : Hex | null {
+        if (y !== undefined && z !== undefined){
+            let x = <integer>pos
+            if (x+y+z != 0 || Math.max(Math.abs(x),Math.abs(y),Math.abs(z))>this.size)
+                return null
+            return (<Hex>this.tiles[`${x},${y},${z}`])
+        }
+        else {
+            let p = <Vec3>pos
+            if (p.x+p.y+p.z != 0 || Math.max(Math.abs(p.x),Math.abs(p.y),Math.abs(p.z))>this.size)
+                return null
+            return (<Hex>this.tiles[`${p.x},${p.y},${p.z}`])
+        }
+    }
+}
+/** Returns a clone of a vector object. */
+function cloneVec(vec: Vec3) : Vec3 {
+    let ret = {x:vec.x,y:vec.y,z:vec.z}
+    return ret
 }
 /** Visual and interactive states of a hex tile */
 enum HexState { 
-    /**
-     * Neutral color, warm on mouse-over, but no dropping units. 
-     */
-    normal
+    /** Regular visuals and slight pop effect on mouseover. Not a drop target. */
+    normal,
+    /** Pop visuals, slight un-pop effect on mouseover. Active drop target. */
+    bright,
+    /** Subdued visuals, no effect on mouseover. Not a drop target. */
+    dim
 }
 /** Hex tiles as a part of a hex board */
 class Hex{
@@ -98,6 +130,8 @@ class Hex{
     pos: {x:integer,y:integer,z:integer}
     /** The parent board this tile belongs to.*/
     board: HexBoard
+    /** Hex type, under the rules of the game */
+    type: TileType = TileType.normal
     /** State of the tile, determining response and grabbing behavior. */
     state: HexState = HexState.normal
     /** 
@@ -105,15 +139,53 @@ class Hex{
      * @param board The hex board under which this hex tile is being made
      * @param pos The position of this tile on the board in xyz hex coordinates. 
      */
-    constructor(board:HexBoard,pos:Vec3) {
+    constructor(board:HexBoard,pos:Vec3,type:TileType) {
         let brd = this.board = board
         this.pos = pos
-        let sPos = Hex.hexToScreenPos(brd.center,brd.radius,this.pos) 
-        this.object = brd.scene.add.polygon(sPos.x,sPos.y,hexPoints(brd.radius))
-            .setOrigin(0,0).setVisible(true).setFillStyle(0x556655,0.5).setScale(0.9,0.9)
+        this.type = type
+        let screenPos = Hex.hexToScreenPos(brd.center,brd.radius,this.pos) 
+        this.object = brd.scene.add.polygon(screenPos.x,screenPos.y,hexPoints(brd.radius))
+            .setOrigin(0,0).setVisible(true)
+        switch(type) {
+            case TileType.normal:   this.object.setFillStyle(brd.theme.normal); break;
+            case TileType.escape:   this.object.setFillStyle(brd.theme.escape); break;
+            case TileType.start:    this.object.setFillStyle(brd.theme.start); break;
+        }
         this.object.setInteractive(this.object.geom,Phaser.Geom.Polygon.Contains)
 
         this.setState(HexState.normal)
+    }
+    /**
+     * Get neighboring hex on board in the specified direction.
+     * @param dir Hex cardinal direction (NE,E,SE,SW,...) to get bordering hex
+     * @returns The hex tile neighbor, or null if it's the edge of the board.
+     */ 
+    getNbr(dir:Dir): Hex {
+        let nbrPos:Vec3 = cloneVec(this.pos)
+        switch (dir) {
+            case Dir.NE: nbrPos.z++; nbrPos.y--; break;
+            case Dir.E:  nbrPos.x++; nbrPos.y--; break;
+            case Dir.SE: nbrPos.x++; nbrPos.z--; break;
+            case Dir.SW: nbrPos.y++; nbrPos.z--; break;
+            case Dir.W:  nbrPos.y++; nbrPos.x--; break;
+            case Dir.NW: nbrPos.z++; nbrPos.x--; break;
+        }
+        return this.board.get(nbrPos)
+    }
+    /**
+     * Get neighbor hex and its flanking tiles in the specified direction.
+     * @param dir Hex cardinal direction of neighbor.
+     * @returns List of neighbor and 3 flanking hexes with respect to this hex. Null for out of bounds.
+     * */
+    getNbrFlanks(dir:Dir): {nbr:Hex,left:Hex,back:Hex,right:Hex} {
+        let nbr = this.getNbr(dir)
+        if (nbr === null) return {nbr:nbr,left:null,back:null,right:null}
+        return {
+            nbr:    nbr,
+            left:   nbr.getNbr((dir-1)%6),
+            back:   nbr.getNbr(dir),
+            right:  nbr.getNbr((dir+1)%6)
+        }
     }
     /** Converts a hex xyz position to top-left-origin 2d coordinates.*/
     static hexToScreenPos(center:Vec2,rad:number,hPos:Vec3) : Vec2 {
@@ -128,6 +200,7 @@ class Hex{
         var self = this
         switch (state) {
             case HexState.normal:
+                Hex.popTween(self.object,0.9,0.5)
                 this.object.setActive(true).setVisible(true).off('pointerover').off('pointerout')
                 .on('pointerout', () => {Hex.popTween(self.object,0.9,0.5)})
                 .on('pointerover', () => {Hex.popTween(self.object,0.95,0.8)})
@@ -137,6 +210,7 @@ class Hex{
         }
         this.state = state
     }
+    /** Animation to pop an object to a specified scale and alpha */
     static popTween(object:Polygon,scale:number,alpha:number) {
         object.scene.tweens.add(
             { targets: object, 

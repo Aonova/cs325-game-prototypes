@@ -12,15 +12,15 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 import "./phaser.js";
-var HexDir;
-(function (HexDir) {
-    HexDir[HexDir["NE"] = 0] = "NE";
-    HexDir[HexDir["E"] = 1] = "E";
-    HexDir[HexDir["SE"] = 2] = "SE";
-    HexDir[HexDir["SW"] = 3] = "SW";
-    HexDir[HexDir["W"] = 4] = "W";
-    HexDir[HexDir["NW"] = 5] = "NW";
-})(HexDir || (HexDir = {}));
+var Dir;
+(function (Dir) {
+    Dir[Dir["NE"] = 0] = "NE";
+    Dir[Dir["E"] = 1] = "E";
+    Dir[Dir["SE"] = 2] = "SE";
+    Dir[Dir["SW"] = 3] = "SW";
+    Dir[Dir["W"] = 4] = "W";
+    Dir[Dir["NW"] = 5] = "NW";
+})(Dir || (Dir = {}));
 var TileType;
 (function (TileType) {
     TileType[TileType["start"] = 0] = "start";
@@ -38,10 +38,11 @@ var deg30 = 30 * Math.PI / 180;
 var HexBoard = (function () {
     function HexBoard(scene, size, radius, center, theme) {
         this.theme = {
-            normal: { rgb: 0x444444, a: 0.5 },
-            cold: { rgb: 0x444466, a: 0.7 },
-            warm: { rgb: 0x664444, a: 0.7 },
-            hot: { rgb: 0x773344, a: 0.8 }
+            normal: 0x444444,
+            start: 0x667799,
+            escape: 0x669966,
+            ambusher: 0xbb5555,
+            royalty: 0x5555bb
         };
         this.scene = scene;
         this.size = size;
@@ -63,29 +64,109 @@ var HexBoard = (function () {
         for (var x = -this.size; x <= this.size; x++) {
             for (var y = -this.size; y <= this.size; y++) {
                 for (var z = -this.size; z <= this.size; z++) {
-                    if (x + y + z == 0)
-                        this.tiles[x + "," + y + "," + z] = new Hex(this, { x: x, y: y, z: z });
+                    if (x + y + z == 0) {
+                        var type = TileType.normal;
+                        if (x * y * z == 0 && (Math.abs(x) + Math.abs(y) + Math.abs(z)) == 2 * this.size)
+                            type = TileType.escape;
+                        else if (x == 0 && y == 0 && z == 0)
+                            type = TileType.start;
+                        this.tiles[x + "," + y + "," + z] = new Hex(this, { x: x, y: y, z: z }, type);
+                    }
                 }
             }
         }
     };
+    HexBoard.prototype.get = function (pos, y, z) {
+        if (y !== undefined && z !== undefined) {
+            var x = pos;
+            if (x + y + z != 0 || Math.max(Math.abs(x), Math.abs(y), Math.abs(z)) > this.size)
+                return null;
+            return this.tiles[x + "," + y + "," + z];
+        }
+        else {
+            var p = pos;
+            if (p.x + p.y + p.z != 0 || Math.max(Math.abs(p.x), Math.abs(p.y), Math.abs(p.z)) > this.size)
+                return null;
+            return this.tiles[p.x + "," + p.y + "," + p.z];
+        }
+    };
     return HexBoard;
 }());
+function cloneVec(vec) {
+    var ret = { x: vec.x, y: vec.y, z: vec.z };
+    return ret;
+}
 var HexState;
 (function (HexState) {
     HexState[HexState["normal"] = 0] = "normal";
+    HexState[HexState["bright"] = 1] = "bright";
+    HexState[HexState["dim"] = 2] = "dim";
 })(HexState || (HexState = {}));
 var Hex = (function () {
-    function Hex(board, pos) {
+    function Hex(board, pos, type) {
+        this.type = TileType.normal;
         this.state = HexState.normal;
         var brd = this.board = board;
         this.pos = pos;
-        var sPos = Hex.hexToScreenPos(brd.center, brd.radius, this.pos);
-        this.object = brd.scene.add.polygon(sPos.x, sPos.y, hexPoints(brd.radius))
-            .setOrigin(0, 0).setVisible(true).setFillStyle(0x556655, 0.5).setScale(0.3, 0.9);
+        this.type = type;
+        var screenPos = Hex.hexToScreenPos(brd.center, brd.radius, this.pos);
+        this.object = brd.scene.add.polygon(screenPos.x, screenPos.y, hexPoints(brd.radius))
+            .setOrigin(0, 0).setVisible(true);
+        switch (type) {
+            case TileType.normal:
+                this.object.setFillStyle(brd.theme.normal);
+                break;
+            case TileType.escape:
+                this.object.setFillStyle(brd.theme.escape);
+                break;
+            case TileType.start:
+                this.object.setFillStyle(brd.theme.start);
+                break;
+        }
         this.object.setInteractive(this.object.geom, Phaser.Geom.Polygon.Contains);
         this.setState(HexState.normal);
     }
+    Hex.prototype.getNbr = function (dir) {
+        var nbrPos = cloneVec(this.pos);
+        switch (dir) {
+            case Dir.NE:
+                nbrPos.z++;
+                nbrPos.y--;
+                break;
+            case Dir.E:
+                nbrPos.x++;
+                nbrPos.y--;
+                break;
+            case Dir.SE:
+                nbrPos.x++;
+                nbrPos.z--;
+                break;
+            case Dir.SW:
+                nbrPos.y++;
+                nbrPos.z--;
+                break;
+            case Dir.W:
+                nbrPos.y++;
+                nbrPos.x--;
+                break;
+            case Dir.NW:
+                nbrPos.z++;
+                nbrPos.x--;
+                break;
+        }
+        return this.board.get(nbrPos);
+    };
+    Hex.prototype.getNbrFlanks = function (dir) {
+        var nbr = this.getNbr(dir);
+        if (nbr === null)
+            return { nbr: nbr, left: null, back: null, right: null };
+        return {
+            nbr: nbr,
+            left: nbr.getNbr((dir - 1) % 6),
+            back: nbr.getNbr(dir),
+            right: nbr.getNbr((dir + 1) % 6)
+        };
+    };
     Hex.hexToScreenPos = function (center, rad, hPos) {
         var pos = { x: center.x, y: center.y };
         pos.x += (hPos.x * Math.cos(deg30) - hPos.y * Math.cos(deg30)) * rad;
@@ -97,6 +178,7 @@ var Hex = (function () {
         var self = this;
         switch (state) {
             case HexState.normal:
+                Hex.popTween(self.object, 0.9, 0.5);
                 this.object.setActive(true).setVisible(true).off('pointerover').off('pointerout')
                     .on('pointerout', function () { Hex.popTween(self.object, 0.9, 0.5); })
                     .on('pointerover', function () { Hex.popTween(self.object, 0.95, 0.8); });
