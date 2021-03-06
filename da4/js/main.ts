@@ -538,11 +538,13 @@ class Unit extends Label {
         
         this.showGrand(300,200,300,2)
     }
-    /** Try and capture any adjacent enemy units if you are able to.
-     *  Should be called after moving a unit on the turn of the team. 
-     *  @returns array of capture objects, with 'enemy' captured and 'buddies' which flanked 
+    /** Check if any adjacent enemy units can be captured.
+     *  Should be called after the player moves the unit on their turn.
+     * 
+     *  Has no persistent effect, simply generates capture objects and returns them. 
+     *  @returns array of capture objects, with 'enemy' captured and array of 'buddies' who flanked
     */
-    attemptCapture(): {enemy:Unit,buddies:Unit[]}[] {
+    checkCapture(): {enemy:Unit,buddies:Unit[]}[] {
         let toCapture = new Array<{enemy:Unit,buddies:Unit[]}>()
         if (this.uType==UnitType.king) return toCapture// Kings cannot initiate capture
         this.hex.forEachNbr((nbr,dir)=>{
