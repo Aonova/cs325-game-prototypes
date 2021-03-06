@@ -12,6 +12,17 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 import "./phaser.js";
+function vecStr(v) {
+    if (v == null)
+        return '(null)';
+    var msg = "(" + v.x + "," + v.y;
+    if (v.z != null) {
+        var v3 = v;
+        msg += "," + v3.z;
+    }
+    msg += ')';
+    return msg;
+}
 var Dir;
 (function (Dir) {
     Dir[Dir["NE"] = 0] = "NE";
@@ -101,15 +112,21 @@ var HexBoard = (function () {
             _loop_1(x);
         }
     };
+    HexBoard.prototype.forEachTile = function (callback) {
+        for (var key in this.tiles) {
+            var hex = this.tiles[key];
+            callback(hex);
+        }
+    };
     HexBoard.prototype.initKing = function () {
-        this.startTile.unit = new Unit(this.startTile, UnitType.king);
+        this.startTile.setUnit(new Unit(this.startTile, UnitType.king));
     };
     HexBoard.prototype.initMercs = function () {
         var _this = this;
         var inter = 600;
         var _loop_4 = function (i) {
             delay(this_2.scene, inter * i, this_2, function () {
-                _this.escapeTile[i].unit = new Unit(_this.escapeTile[i], UnitType.merc);
+                _this.escapeTile[i].setUnit(new Unit(_this.escapeTile[i], UnitType.merc));
             });
         };
         var this_2 = this;
@@ -179,6 +196,8 @@ var Hex = (function (_super) {
         _this.hType = HexType.normal;
         _this.hState = HexState.normal;
         _this.unit = null;
+        _this.debugText = null;
+        _this.team = -1;
         _this.setOrigin(0, 0).setScale(0, 0).setActive(true).setVisible(true);
         _this.scene.add.existing(_this);
         _this.board = board;
@@ -236,6 +255,12 @@ var Hex = (function (_super) {
             ret.push(this.getNbr(i));
         return ret;
     };
+    Hex.prototype.forEachNbr = function (callback) {
+        var nbrs = this.getNbrs();
+        for (var i = 0; i < 6; i++)
+            if (nbrs[i] != null)
+                callback(nbrs[i], i);
+    };
     Hex.prototype.getNbrFlanks = function (dir) {
         var nbr = this.getNbr(dir);
         if (nbr === null)
@@ -246,6 +271,53 @@ var Hex = (function (_super) {
             back: nbr.getNbr(dir),
             right: nbr.getNbr((dir + 1) % 6)
         };
+    };
+    Hex.prototype.initDebugText = function () {
+        this.debugText = this.scene.add.text(this.x, this.y, "init", { fontSize: '11px', align: 'center' }).setVisible(false).setAlpha(0.6).setOrigin(0.5, 0.5)
+            .setDepth(3);
+    };
+    Hex.prototype.updateDebugText = function () {
+        if (this.debugText == null)
+            return;
+        this.debugText.setPosition(this.x, this.y)
+            .setText(vecStr(this.hPos)
+            + ("\ns[" + this.state + "]")
+            + (" u[" + (this.isEmpty() ? '-1' : this.unit.uType) + "]"));
+    };
+    Hex.prototype.showDebugText = function () {
+        if (this.debugText == null)
+            this.initDebugText();
+        this.updateDebugText();
+        this.debugText.setVisible(true);
+    };
+    Hex.prototype.hideDebugText = function () {
+        if (this.debugText == null)
+            return;
+        this.debugText.setVisible(false);
+    };
+    Hex.prototype.getTeam = function () {
+        return this.team;
+    };
+    Hex.prototype.updateTeam = function () {
+        if (this.unit == null) {
+            if (this.hType == HexType.start)
+                this.team = 1;
+            else
+                this.team = -1;
+        }
+        else
+            this.team = this.unit.team;
+    };
+    Hex.prototype.isNeutral = function () {
+        return (this.team == -1);
+    };
+    Hex.prototype.setUnit = function (unit) {
+        this.unit = unit;
+        if (this.debugText != null)
+            this.updateDebugText();
+    };
+    Hex.prototype.getUnit = function () {
+        return this.unit;
     };
     Hex.prototype.setHexState = function (state) {
         var brd = this.board;
@@ -274,12 +346,17 @@ var Hex = (function (_super) {
                 break;
         }
         this.state = state;
+        this.updateDebugText();
         return this;
     };
     Hex.prototype.remove = function () {
         var _this = this;
         this.removeInteractive();
-        Hex.popTween(this, 0, 0, 500, function () { return _this.destroy(); });
+        Hex.popTween(this, 0, 0, 500, function () {
+            _this.destroy();
+            if (_this.debugText != null)
+                _this.debugText.destroy();
+        });
     };
     Hex.popTween = function (object, scale, alpha, duration, callback) {
         var conf = {
@@ -475,6 +552,28 @@ var Unit = (function (_super) {
         _this.showGrand(300, 200, 300, 2);
         return _this;
     }
+    Unit.prototype.attemptCapture = function () {
+        var _this = this;
+        var toCapture = new Array();
+        if (this.uType == UnitType.king)
+            return toCapture;
+        this.hex.forEachNbr(function (nbr, dir) {
+            if (!nbr.isEmpty() && nbr.getUnit().team != _this.team) {
+                var flanks = _this.hex.getNbrFlanks(dir);
+                var score = 0;
+                if (flanks.back != null &&
+                    (flanks.back.hType != HexType.start && !flanks.back.isEmpty() && flanks.back.getUnit().team == _this.team ||
+                        _this.team == 1 && flanks.back.hType == HexType.start && flanks.back.isEmpty()))
+                    score += 2;
+                if (flanks.right != null && flanks.back.hType != HexType.start && !flanks.right.isEmpty() && flanks.right.getUnit().team == _this.team)
+                    score += 1;
+                if (flanks.left != null && flanks.back.hType != HexType.start && !flanks.left.isEmpty() && flanks.left.getUnit().team == _this.team)
+                    score += 1;
+                if (score > 1 || flanks.nbr.hType == HexType.escape && score > 0)
+                    toCapture.push(flanks.nbr);
+            }
+        });
+    };
     return Unit;
 }(Label));
 function hexPoints(rad) {
@@ -493,7 +592,7 @@ var Demo = (function (_super) {
     function Demo() {
         var _this = _super.call(this, 'demo') || this;
         _this.HexRad = 43;
-        _this.boardSize = 4;
+        _this.boardSize = 3;
         _this.gamePhase = 0;
         _this.scoreAmbusher = 0;
         _this.scoreRoyalty = 0;
@@ -510,9 +609,16 @@ var Demo = (function (_super) {
             .image('unit_guard', 'assets/guard.png')
             .image('unit_king', 'assets/king.png')
             .image('win_ambusher', 'assets/ambusherwins.png')
-            .image('win_royalty', 'assets/royaltywins.png');
+            .image('win_royalty', 'assets/royaltywins.png')
+            .audio('bgm_main', 'assets/drum_loop.mp3')
+            .audio('accent_royalty', 'assets/kagura1.mp3')
+            .audio('accent_ambusher', 'assets/kagura2.mp3')
+            .audio('accent_battle', 'assets/horagai.mp3')
+            .audio('victory', 'assets/victory.mp3');
     };
     Demo.prototype.create = function () {
+        this.bgm = this.sound.add('bgm_main', { loop: true });
+        this.bgm.play();
         this.initTitlePhase();
     };
     Demo.prototype.update = function () {
@@ -550,6 +656,7 @@ var Demo = (function (_super) {
             var _this = this;
             ambushCard.unfocus(true);
             royalCard.focus(true);
+            royalCard.scene.sound.play('accent_royalty');
             var pending = turn == 0 ? 2 : 1;
             setBrightOpenTeamHex(0, board);
             var _loop_8 = function (key) {
@@ -557,7 +664,7 @@ var Demo = (function (_super) {
                 if (hex.state != HexState.bright)
                     return "continue";
                 hex.on('pointerup', function () {
-                    hex.unit = new Unit(hex, UnitType.guard);
+                    hex.setUnit(new Unit(hex, UnitType.guard));
                     pending--;
                     hex.setHexState(HexState.normal);
                     if (pending == 0) {
@@ -581,13 +688,14 @@ var Demo = (function (_super) {
             var _this = this;
             ambushCard.focus(true);
             royalCard.unfocus(true);
+            royalCard.scene.sound.play('accent_ambusher');
             setBrightOpenTeamHex(1, board);
             var _loop_9 = function (key) {
                 var hex = board.tiles[key];
                 if (hex.state != HexState.bright)
                     return "continue";
                 hex.on('pointerup', function () {
-                    hex.unit = new Unit(hex, UnitType.merc);
+                    hex.setUnit(new Unit(hex, UnitType.merc));
                     resetState(board);
                     delay(hex.scene, 500, _this, doFinally);
                 }, this_5);
@@ -601,17 +709,21 @@ var Demo = (function (_super) {
             }
         }
         function setBrightOpenTeamHex(team, board) {
-            for (var key in board.tiles) {
-                var hex = board.tiles[key];
-                if (hex.unit != null && hex.unit.team == team) {
-                    hex.getNbrs().forEach(function (nbr) {
-                        if (nbr != null && nbr.isEmpty)
+            board.forEachTile(function (hex) {
+                var toRet = new Array();
+                if (!hex.isEmpty() && hex.getUnit().team == team) {
+                    var nbrs = hex.getNbrs();
+                    for (var i = 0; i < 6; i++) {
+                        var nbr = nbrs[i];
+                        if (nbr != null && nbr.isEmpty()) {
                             nbr.setHexState(HexState.bright);
-                    });
+                            toRet.push(nbr);
+                        }
+                    }
                 }
-                else if (hex.isEmpty)
+                else if (hex.isEmpty() && hex.state == HexState.normal)
                     hex.setHexState(HexState.dim);
-            }
+            });
         }
         function resetState(board) {
             for (var key in board.tiles) {
