@@ -12,6 +12,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 import "./phaser.js";
+var DEBUG_MODE = false;
 function vecStr(v) {
     if (v == null)
         return '(null)';
@@ -111,6 +112,8 @@ var HexBoard = (function () {
         for (var x = -this.size; x <= this.size; x++) {
             _loop_1(x);
         }
+        if (DEBUG_MODE)
+            this.forEachTile(function (h) { return h.showDebugText(); });
     };
     HexBoard.prototype.forEachTile = function (callback) {
         for (var key in this.tiles) {
@@ -552,27 +555,60 @@ var Unit = (function (_super) {
         _this.showGrand(300, 200, 300, 2);
         return _this;
     }
-    Unit.prototype.attemptCapture = function () {
+    Unit.prototype.checkCapture = function () {
         var _this = this;
         var toCapture = new Array();
         if (this.uType == UnitType.king)
             return toCapture;
         this.hex.forEachNbr(function (nbr, dir) {
             if (!nbr.isEmpty() && nbr.getUnit().team != _this.team) {
+                var buddies = new Array();
                 var flanks = _this.hex.getNbrFlanks(dir);
                 var score = 0;
-                if (flanks.back != null &&
-                    (flanks.back.hType != HexType.start && !flanks.back.isEmpty() && flanks.back.getUnit().team == _this.team ||
-                        _this.team == 1 && flanks.back.hType == HexType.start && flanks.back.isEmpty()))
+                if (flanks.back != null && flanks.back.getTeam() == _this.team) {
+                    if (!flanks.back.isEmpty())
+                        buddies.push(flanks.back.getUnit());
                     score += 2;
-                if (flanks.right != null && flanks.back.hType != HexType.start && !flanks.right.isEmpty() && flanks.right.getUnit().team == _this.team)
-                    score += 1;
-                if (flanks.left != null && flanks.back.hType != HexType.start && !flanks.left.isEmpty() && flanks.left.getUnit().team == _this.team)
-                    score += 1;
-                if (score > 1 || flanks.nbr.hType == HexType.escape && score > 0)
-                    toCapture.push(flanks.nbr);
+                }
+                else {
+                    if (flanks.right != null && flanks.right.getTeam() == _this.team) {
+                        if (!flanks.right.isEmpty())
+                            buddies.push(flanks.right.getUnit());
+                        score += 1;
+                    }
+                    if (flanks.left != null && flanks.left.getTeam() == _this.team) {
+                        if (!flanks.left.isEmpty())
+                            buddies.push(flanks.left.getUnit());
+                        score += 1;
+                    }
+                }
+                if (score > 1 || flanks.nbr.hType == HexType.escape && score > 0) {
+                    toCapture.push({ enemy: flanks.nbr.getUnit(), buddies: buddies });
+                }
             }
         });
+        return toCapture;
+    };
+    Unit.prototype.showAttack = function (buddies, callback) {
+        buddies.push(this);
+        this.scene.add.tween({
+            targets: buddies, duration: 350, yoyo: true, onComplete: callback, onCompleteParams: this, ease: 'Sine',
+            scale: this.scale * 1.2
+        });
+    };
+    Unit.prototype.showDefeat = function (callback) {
+        this.scene.add.tween({
+            targets: this, duration: 350, yoyo: true, ease: 'Sine',
+            scale: this.scale * 0.5
+        });
+        this.scene.add.tween({
+            targets: this, duration: 700, ease: 'Sine', onComplete: callback, onCompleteParams: this,
+            alpha: 0
+        });
+    };
+    Unit.prototype.destroy = function () {
+        this.hex.setUnit(null);
+        _super.prototype.destroy.call(this);
     };
     return Unit;
 }(Label));
@@ -591,13 +627,27 @@ var Demo = (function (_super) {
     __extends(Demo, _super);
     function Demo() {
         var _this = _super.call(this, 'demo') || this;
-        _this.HexRad = 43;
+        _this.HexRad = 50;
         _this.boardSize = 3;
-        _this.gamePhase = 0;
         _this.scoreAmbusher = 0;
         _this.scoreRoyalty = 0;
+        _this.soundCounter = [0, 0];
         return _this;
     }
+    Demo.prototype.updateScore = function () {
+        if (this.scoreRoyaltyText)
+            this.scoreRoyaltyText.setText(this.scoreRoyalty.toLocaleString('en-US', { minimumIntegerDigits: 2 }));
+        if (this.scoreAmbushText)
+            this.scoreAmbushText.setText(this.scoreAmbusher.toLocaleString('en-US', { minimumIntegerDigits: 2 }));
+    };
+    Demo.prototype.playSoundAttack = function () {
+        this.sound.play('attack' + this.soundCounter[0]++);
+        this.soundCounter[0] %= 2;
+    };
+    Demo.prototype.playSoundDrum = function () {
+        this.sound.play('drum' + this.soundCounter[1]++);
+        this.soundCounter[1] %= 2;
+    };
     Demo.prototype.preload = function () {
         this.load.image('title', 'assets/titlecard.png')
             .image('but_cont', 'assets/but_continue.png')
@@ -614,10 +664,12 @@ var Demo = (function (_super) {
             .audio('accent_royalty', 'assets/kagura1.mp3')
             .audio('accent_ambusher', 'assets/kagura2.mp3')
             .audio('accent_battle', 'assets/horagai.mp3')
-            .audio('victory', 'assets/victory.mp3');
+            .audio('victory', 'assets/victory.mp3')
+            .audio('attack0', 'assets/attack1.mp3').audio('attack1', 'assets/attack2.mp3')
+            .audio('drum0', 'assets/drum1.wav').audio('drum1', 'assets/drum2.wav');
     };
     Demo.prototype.create = function () {
-        this.bgm = this.sound.add('bgm_main', { loop: true });
+        this.bgm = this.sound.add('bgm_main', { loop: true, volume: 0.7 });
         this.bgm.play();
         this.initTitlePhase();
     };
@@ -634,29 +686,43 @@ var Demo = (function (_super) {
             var _this = this;
             titleCard.hide(300);
             confButton.hide(300);
-            delay(this, 400, this, function () { return _this.initDeployPhase(); });
+            delay(this, 400, this, function () { return _this.initDeployPhase(_this); });
         }
     };
-    Demo.prototype.initDeployPhase = function () {
+    Demo.prototype.initDeployPhase = function (scene, board, royalCard, ambushCard) {
         var _this = this;
-        this.mainBoard = new HexBoard(this, this.boardSize, this.HexRad);
+        var firstTime = board == null;
+        board = firstTime ? new HexBoard(this, this.boardSize, this.HexRad) : board;
         var phaseCard = new Label(this, this.cameras.main.width - 10, 10, 'card_deploy', { x: 1, y: 0 }).setScale(0.9);
-        var royalCard = new Label(this, 10, 10, 'card_royalty', { x: 0, y: 0 }, this.mainBoard.theme.royalty).setScale(0.6);
-        var ambushCard = new Label(this, 10, this.cameras.main.height - 10, 'card_ambusher', { x: 0, y: 1 }, this.mainBoard.theme.ambusher).setScale(0.6);
-        var time = 1600;
-        delay(this, time, this, function () { return phaseCard.showGrand(400, 500, 500); });
-        delay(this, time += 1300, this, function () { return royalCard.showGrand(400, 500, 400); });
-        delay(this, time += 1300, this, function () { return ambushCard.showGrand(400, 500, 400); });
-        delay(this, time += 1300 + 500, this, function () { ambushCard.unfocus(true); royalCard.focus(true); });
-        delay(this, time += 200, this, function () { return _this.mainBoard.initKing(); });
+        royalCard = firstTime ? new Label(this, 10, 10, 'card_royalty', { x: 0, y: 0 }, board.theme.royalty).setScale(0.6) : royalCard;
+        ambushCard = firstTime ? new Label(this, 10, this.cameras.main.height - 10, 'card_ambusher', { x: 0, y: 1 }, board.theme.ambusher).setScale(0.6) : ambushCard;
+        var time = firstTime ? 1600 : 100;
+        delay(this, time, this, function () { return phaseCard.showGrand(400, 400, 400); });
+        if (firstTime) {
+            delay(this, time += 1100, this, function () { return royalCard.showGrand(400, 400, 400); });
+            delay(this, time += 1100, this, function () { return ambushCard.showGrand(400, 400, 400); });
+            delay(this, time += 1200, this, function () {
+                var style = {
+                    fontFamily: 'DotGothic16', fontSize: '100px', stroke: '#76C', strokeThickness: 8
+                };
+                var royalScore = scene.scoreRoyaltyText = _this.add.text(royalCard.getBounds().left, royalCard.getBounds().bottom - 50, '00', style).setOrigin(0, 0).setAlpha(0).setScale(1.5);
+                style.stroke = '#C66';
+                var ambushScore = scene.scoreAmbushText = _this.add.text(ambushCard.getBounds().left, ambushCard.getBounds().top - 150, '00', style).setOrigin(0, 1).setAlpha(0).setScale(1.5);
+                _this.add.tween({
+                    targets: [royalScore, ambushScore], duration: 400, ease: 'Sine', alpha: 1, scale: 1, y: '+=100'
+                });
+            });
+        }
+        delay(this, time += firstTime ? 500 : 1100, this, function () { ambushCard.unfocus(true); royalCard.focus(true); });
+        delay(this, time += 200, this, function () { return board.initKing(); });
         delay(this, time += 700, this, function () { ambushCard.focus(true); royalCard.unfocus(true); });
-        delay(this, time += 200, this, function () { return _this.mainBoard.initMercs(); });
-        delay(this, time += 4200, this, function () { return royalTurn(0, _this.mainBoard); });
-        function royalTurn(turn, board) {
+        delay(this, time += 200, this, function () { return board.initMercs(); });
+        delay(this, time += 4200, this, function () { return royalTurn(0, board, scene); });
+        function royalTurn(turn, board, scene) {
             var _this = this;
             ambushCard.unfocus(true);
             royalCard.focus(true);
-            royalCard.scene.sound.play('accent_royalty');
+            scene.sound.play('accent_royalty');
             var pending = turn == 0 ? 2 : 1;
             setBrightOpenTeamHex(0, board);
             var _loop_8 = function (key) {
@@ -665,6 +731,7 @@ var Demo = (function (_super) {
                     return "continue";
                 hex.on('pointerup', function () {
                     hex.setUnit(new Unit(hex, UnitType.guard));
+                    scene.playSoundDrum();
                     pending--;
                     hex.setHexState(HexState.normal);
                     if (pending == 0) {
@@ -678,23 +745,33 @@ var Demo = (function (_super) {
                 _loop_8(key);
             }
             function doFinally() {
+                var _this = this;
                 if (turn != 4)
-                    ambushTurn(turn + 1, board);
-                else
-                    console.log('STUB: should be going to battle phase!');
+                    ambushTurn(turn + 1, board, scene);
+                else {
+                    royalCard.focus(false);
+                    ambushCard.focus(false);
+                    delay(scene, 500, this, function () {
+                        phaseCard.hide(1000);
+                        delay(scene, 1200, _this, function () { phaseCard.destroy(); });
+                        scene.initBattlePhase(scene, board, royalCard, ambushCard);
+                        console.log('Go to battle phase');
+                    });
+                }
             }
         }
-        function ambushTurn(turn, board) {
+        function ambushTurn(turn, board, scene) {
             var _this = this;
             ambushCard.focus(true);
             royalCard.unfocus(true);
-            royalCard.scene.sound.play('accent_ambusher');
+            scene.sound.play('accent_ambusher');
             setBrightOpenTeamHex(1, board);
             var _loop_9 = function (key) {
                 var hex = board.tiles[key];
                 if (hex.state != HexState.bright)
                     return "continue";
                 hex.on('pointerup', function () {
+                    scene.playSoundDrum();
                     hex.setUnit(new Unit(hex, UnitType.merc));
                     resetState(board);
                     delay(hex.scene, 500, _this, doFinally);
@@ -705,7 +782,7 @@ var Demo = (function (_super) {
                 _loop_9(key);
             }
             function doFinally() {
-                royalTurn(turn + 1, board);
+                royalTurn(turn + 1, board, scene);
             }
         }
         function setBrightOpenTeamHex(team, board) {
@@ -731,6 +808,11 @@ var Demo = (function (_super) {
                 hex.setHexState(HexState.normal);
             }
         }
+    };
+    Demo.prototype.initBattlePhase = function (scene, board, royalCard, ambushCard) {
+        var phaseCard = new Label(this, this.cameras.main.width - 10, 10, 'card_battle', { x: 1, y: 0 }, 0xffdd99).setScale(0.9);
+        phaseCard.showGrand(400, 400, 400);
+        scene.sound.play('accent_battle');
     };
     return Demo;
 }(Phaser.Scene));

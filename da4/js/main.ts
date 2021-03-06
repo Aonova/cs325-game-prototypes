@@ -1,4 +1,6 @@
 import "./phaser.js"
+
+const DEBUG_MODE = false
 // You can copy-and-paste the code from any of the examples at https://examples.phaser.io here.
 // You will need to change the `parent` parameter passed to `new Phaser.Game()` from
 // `phaser-example` to `game`, which is the id of the HTML element where we
@@ -115,7 +117,7 @@ class HexBoard{
                 }
             }
         }
-        // this.forEachTile(h=>h.showDebugText()) // TODO: remove debug
+        if (DEBUG_MODE) this.forEachTile(h=>h.showDebugText())
     }
     /**
      * Shortcut to perform a function for each tile on the board
@@ -617,20 +619,34 @@ function hexPoints(rad:number): Vec2[] {
 }
 class Demo extends Phaser.Scene {
     /** Side length and circum-circle radius of a hex. Effectively controls the size of each hex. */
-    HexRad:number = 43
+    HexRad:number = 50
     /** Number of rings on the hex board. Effectively controls the number of hexes on the board.*/
     boardSize:integer = 3
-    /** Phases: 0=start, 1=deploy, 2=battle, 3=round-end */
-    gamePhase = 0
     /** Score for Ambusher player */
     scoreAmbusher = 0
+    scoreAmbushText: Phaser.GameObjects.Text
     /** Score for Royalty player */
     scoreRoyalty = 0
-    /** Active hex board */
-    mainBoard: HexBoard
+    scoreRoyaltyText: Phaser.GameObjects.Text
+    /** Update score text with current score, if the text objects are initialized */
+    updateScore() {
+        if (this.scoreRoyaltyText) this.scoreRoyaltyText.setText(this.scoreRoyalty.toLocaleString('en-US',{minimumIntegerDigits:2}))
+        if (this.scoreAmbushText) this.scoreAmbushText.setText(this.scoreAmbusher.toLocaleString('en-US',{minimumIntegerDigits:2}))
+    }
     /** Looping background music */
     bgm: Phaser.Sound.BaseSound
-    private attackCounter = 0
+    /** Variations for certain sound effects */
+    private soundCounter = [0,0]
+    /** Play alternating 'attack' sfx */
+    playSoundAttack() {
+        this.sound.play('attack'+this.soundCounter[0]++)
+        this.soundCounter[0] %= 2  
+    }
+    /** Play alternating 'drum' sfx */
+    playSoundDrum() {
+        this.sound.play('drum'+this.soundCounter[1]++)
+        this.soundCounter[1] %= 2
+    }
     constructor() {
         super('demo');
     }
@@ -652,23 +668,17 @@ class Demo extends Phaser.Scene {
             .audio('accent_ambusher','assets/kagura2.mp3')
             .audio('accent_battle','assets/horagai.mp3')
             .audio('victory','assets/victory.mp3')
-            .audio('attack0','assets/attack1.mp3')
-            .audio('attack1','assets/attack2.mp3')
+            .audio('attack0','assets/attack1.mp3').audio('attack1','assets/attack2.mp3')
+            .audio('drum0','assets/drum1.wav').audio('drum1','assets/drum2.wav')
     }
     
-    private playAttackSound() {
-        this.sound.play('attack'+this.attackCounter++)
-        this.attackCounter %= 2  
-    }
-
     create() {
-        this.bgm = this.sound.add('bgm_main',{loop:true})
-
+        this.bgm = this.sound.add('bgm_main',{loop:true,volume:0.7})
         this.bgm.play()
         this.initTitlePhase()
     }
     
-    update() { // do nothing on updates since game logic is entirely event based
+    update() { // do nothing on explicitly per update since game logic is entirely lock-step/event-based
     }
 
     initTitlePhase() {
@@ -680,29 +690,43 @@ class Demo extends Phaser.Scene {
         function onClickConfirm() {
             titleCard.hide(300)
             confButton.hide(300);
-            delay(this,400,this,()=>this.initDeployPhase())
+            delay(this,400,this,()=>this.initDeployPhase(<Demo>this))
         }
     }
-    initDeployPhase() {
-        this.mainBoard = new HexBoard(this,this.boardSize,this.HexRad)
+    initDeployPhase(scene:Demo,board?:HexBoard,royalCard?:Label,ambushCard?:Label) {
+        let firstTime = board==null
+        // initialize game-objects if first time being called (no parameters), else use passed references
+        board = firstTime ? new HexBoard(this,this.boardSize,this.HexRad) : board
         let phaseCard = new Label(this,this.cameras.main.width-10,10,'card_deploy',{x:1,y:0}).setScale(0.9)
-        let royalCard = new Label(this,10,10,'card_royalty',{x:0,y:0},this.mainBoard.theme.royalty).setScale(0.6)
-        let ambushCard = new Label(this,10,this.cameras.main.height-10,'card_ambusher',{x:0,y:1},this.mainBoard.theme.ambusher).setScale(0.6)
-        // TODO: show score text
-        let time = 1600 // initial time taken for making board
-        delay(this,time,this,()=>phaseCard.showGrand(400,500,500)) 
-        delay(this,time+=1300,this,()=>royalCard.showGrand(400,500,400))
-        delay(this,time+=1300,this,()=>ambushCard.showGrand(400,500,400))
-        delay(this,time+=1300+500,this,()=>{ambushCard.unfocus(true);royalCard.focus(true)})
-        delay(this,time+=200,this,()=>this.mainBoard.initKing())
+        royalCard = firstTime ? new Label(this,10,10,'card_royalty',{x:0,y:0},board.theme.royalty).setScale(0.6) : royalCard
+        ambushCard = firstTime ? new Label(this,10,this.cameras.main.height-10,'card_ambusher',{x:0,y:1},board.theme.ambusher).setScale(0.6) : ambushCard
+        let time = firstTime ? 1600 : 100 // initial time taken for making board
+        delay(this,time,this,()=>phaseCard.showGrand(400,400,400)) 
+        if (firstTime) {
+            delay(this,time+=1100,this,()=>royalCard.showGrand(400,400,400))
+            delay(this,time+=1100,this,()=>ambushCard.showGrand(400,400,400))
+            delay(this,time+=1200,this,()=>{
+                let style: Phaser.Types.GameObjects.Text.TextStyle = {
+                    fontFamily: 'DotGothic16', fontSize: '100px', stroke: '#76C', strokeThickness: 8
+                } 
+                let royalScore = scene.scoreRoyaltyText = this.add.text(royalCard.getBounds().left,royalCard.getBounds().bottom - 50,'00',style).setOrigin(0,0).setAlpha(0).setScale(1.5)
+                style.stroke = '#C66'
+                let ambushScore = scene.scoreAmbushText = this.add.text(ambushCard.getBounds().left,ambushCard.getBounds().top - 150,'00',style).setOrigin(0,1).setAlpha(0).setScale(1.5)
+                this.add.tween({
+                    targets: [royalScore,ambushScore], duration:400, ease: 'Sine', alpha: 1, scale: 1, y: '+=100'
+                })
+            })
+        }
+        delay(this,time+=firstTime ? 500 : 1100,this,()=>{ambushCard.unfocus(true);royalCard.focus(true)})
+        delay(this,time+=200,this,()=>board.initKing())
         delay(this,time+=700,this,()=>{ambushCard.focus(true);royalCard.unfocus(true)})
-        delay(this,time+=200,this,()=>this.mainBoard.initMercs())
-        delay(this,time+=4200,this,()=>royalTurn(0,this.mainBoard))
+        delay(this,time+=200,this,()=>board.initMercs())
+        delay(this,time+=4200,this,()=>royalTurn(0,board,scene))
 
         /** Even turns for royal team */
-        function royalTurn(turn:number,board:HexBoard){
+        function royalTurn(turn:number,board:HexBoard,scene:Demo){
             ambushCard.unfocus(true);royalCard.focus(true)
-            royalCard.scene.sound.play('accent_royalty')
+            scene.sound.play('accent_royalty')
             let pending = turn==0 ? 2 : 1
             setBrightOpenTeamHex(0,board)
             for (const key in board.tiles) { // set bright hexes clickable - placing a unit
@@ -710,6 +734,7 @@ class Demo extends Phaser.Scene {
                 if (hex.state != HexState.bright) continue
                 hex.on('pointerup',()=>{
                     hex.setUnit( new Unit(hex,UnitType.guard) )
+                    scene.playSoundDrum()
                     pending--
                     hex.setHexState(HexState.normal)
                     if (pending==0) {
@@ -719,26 +744,35 @@ class Demo extends Phaser.Scene {
                 },this)
             }
             function doFinally() {
-                if (turn!=4) ambushTurn(turn+1,board)
-                else console.log('STUB: should be going to battle phase!')
+                if (turn!=4) ambushTurn(turn+1,board, scene)
+                else {
+                    royalCard.focus(false);ambushCard.focus(false) // set normal visuals
+                    delay(scene,500,this,()=> {
+                        phaseCard.hide(1000)
+                        delay(scene,1200,this,()=>{phaseCard.destroy()})
+                        scene.initBattlePhase(scene,board,royalCard,ambushCard)
+                        console.log('Go to battle phase')
+                    })
+                }
             }
         }
         /** Odd turns for ambush team */
-        function ambushTurn(turn:number,board:HexBoard) {
+        function ambushTurn(turn:number,board:HexBoard, scene:Demo) {
             ambushCard.focus(true);royalCard.unfocus(true)
-            royalCard.scene.sound.play('accent_ambusher')
+            scene.sound.play('accent_ambusher')
             setBrightOpenTeamHex(1,board)
             for (const key in board.tiles) { // set bright hexes clickable - placing a unit
                 const hex = <Hex>board.tiles[key]
                 if (hex.state != HexState.bright) continue
                 hex.on('pointerup',()=>{
+                    scene.playSoundDrum()
                     hex.setUnit(new Unit(hex,UnitType.merc))
                     resetState(board)
                     delay(hex.scene,500,this,doFinally)
                 },this)
             }
             function doFinally() {
-                royalTurn(turn+1,board)
+                royalTurn(turn+1,board, scene)
             }
         }
         /** Sets team adj open hexes to be bright, and other to be dim, taking 500 ms. Occupied hexes are normal. Returns brightened hexes */
@@ -765,8 +799,23 @@ class Demo extends Phaser.Scene {
             }
         }
     }
+    initBattlePhase(scene:Demo,board:HexBoard,royalCard:Label,ambushCard:Label) {
+        
+        let phaseCard = new Label(this,this.cameras.main.width-10,10,'card_battle',{x:1,y:0},0xffdd99).setScale(0.9)
+        phaseCard.showGrand(400,400,400)
+        scene.sound.play('accent_battle')
+        // random select which team goes first
+        if (Math.random()*100 > 50) royalTurn(board)
+        else ambushTurn(board)
+        function royalTurn(board:HexBoard) {
+
+        }
+        function ambushTurn(board:HexBoard) {
+
+        }
+    }
 }
-//something
+
 
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
