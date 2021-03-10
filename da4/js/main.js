@@ -968,7 +968,7 @@ var Demo = (function (_super) {
                     obj.moveTo(dest, 300);
                     scene.playSoundMove();
                     var tOffset = 400;
-                    if (dest.hType == HexType.escape)
+                    if (obj.uType == UnitType.king && dest.hType == HexType.escape)
                         winFlag = 'royalty';
                     var captures_1 = obj.checkCapture();
                     var _loop_10 = function (i) {

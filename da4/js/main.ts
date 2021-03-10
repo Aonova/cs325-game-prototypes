@@ -977,7 +977,7 @@ class Demo extends Phaser.Scene {
                     obj.moveTo(dest,300)
                     scene.playSoundMove()
                     let tOffset = 400
-                    if (dest.hType == HexType.escape) winFlag = 'royalty'
+                    if (obj.uType==UnitType.king && dest.hType == HexType.escape) winFlag = 'royalty'
                     let captures = obj.checkCapture() // attempt capture at new position
                     for (let i=0;i<captures.length && winFlag==null;i++) {
                         delay(scene,tOffset,this,()=>{
