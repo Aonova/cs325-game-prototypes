@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Digi Assign 2</title>
+    <title>Royal Ambush v1.0</title>
     <style>
     @font-face {
         font-family: 'DotGothic16';
@@ -15,7 +15,7 @@
     body
     {   background-color: black;
         color: #fff;
-        font-family: "Avenir", Verdana, sans-serif;
+        font-family: "DotGothic16","Avenir", Verdana, sans-serif;
     }
     strong,b{color: rgb(255, 208, 0);}
     #readme
@@ -32,22 +32,25 @@
 <div id="readme" style="width: 1280px;">
     <h2><b>Royal Ambush</b></h2>
     <ul>
+    <li><strong>Note: This is the completed version of DA2</strong></li>
     <li><strong>Originality:</strong>
     What is original about your game?
     </li>
-    <p>The rules of the games are based on an original analogue prototype (described in the short attached document). 
-        Only the first phase of those rules are implemented in this prototype.
-        It is also a 2 player game, requiring players to share the mouse and trade and their turn comes around. 
+    <p>While looking like a familiar board game, <i>Royal Ambush</i> is an original modern take on an ancient Celtic/Nordic game called '<i>Tafl</i>'.<br>
+        Requiring two players sharing the same mouse and screen -- emulating a real-life board -- this game implements an original set of rules which I hand-crafted to suit the unique dynamics of a hex board.<br>
+        It calls to mind a unique blend of "Go" and "Checkers", but with a asymmetrical rule-set and objectives between "Ambushers" and "Royalty" players.<br>
+        There is also an element of chance, in that the first player's turn to kick off <i>Battle Phase</i> is always randomly chosen, shaking things up from a traditional chess-like game.
+        Given the asymmetry, players can have entirely different gameplay experiences depending on which side they play. But ultimately, this is a game that is extremely intuitive, quick-to-learn-yet-hard-to-master, high velocity, and intellectually engaging.<br>
+        Also, there is a light bit of flavor-narrative behind the setting of the game - described in the concept doc below - though this prototype does not embellish on that directly, though artistic choices were made to suit it.  
     </p>
 
     <li><strong>Technical Merit:</strong>
     What is interesting about your game technology?
     </li>
-    <p>Hex coordinate system, sleek animations and transitions, responsive kinaesthetic, 
-        tile generation and population (could be randomized if the ruleset required to it).
-        dynamic tile-based user functionality, abstract proximity detection. Figuring out how to generate and interact with hex board
-        was actually extremely involved for me, with a lot of manual calculations to make sense of hexagonal x,y,z and relative positioning and logic.
-        Much of my effort was to make a solid foundation of code for any type of game that uses a regular hexagonal tile system -- not just this simple demonstration. 
+    <p>A lot of this game is a mini tech-demo for myself, teaching myself and playing around with things like x,y,z hex coordinate system, focused aesthetics, sleek animations and transitions, responsive and intuitive kinaesthetic, 
+        tile generation and population, complex fully event-based logic (the scene computes <i>nothing</i> directly per frame/update, all logic is handled through Phaser 3 scene-level event and tween managers),
+        dynamic user functionality, abstract hit detection and direction system (suiting hexagon concept: NE,E,SE,SW,W,NW), user-friendliness, audio feedback and dynamic audio selection (alternating sfx, variation).</br>
+        Figuring out how to generate and interact with hex board was actually extremely involved for me, with a lot of manual calculations and staring at unit circles and triangles to make sense of hexagonal x,y,z and relative positioning and logic. 
     </p>
 
     <li><strong>Prototype Postmortem:</strong>
@@ -56,14 +59,13 @@
     </li>
     <p>Learning the principle design patterns in games the hard way. Thinks like phase loops and control pass-offs between different components.
         Encapsulating logic and learning the best practices was a big challenge as well. I really tried and immerse myself in learning the "right"
-        way to code a game, rather than taking a bunch of shortcuts and making a one-off demo in a comfy, but non-expandable way. I look forward to
-        implementing the "battle" phase when I get the chance to improve on this prototype. Then we can have an actual win condition and a proper closed loop.
+        way to code a game. Event based logic is definitely new for me, and reaching more that <i>a thousand lines of code</i> is a testament to how involved the state-keeping and event-loops turned out to be, haha.   
     </p>
 
     <li><strong>Prototype Assets:</strong>
     </li>
     <p>I made all of my graphical assets, using generic Photoshop assets and hand-drawings.<br>
-    Audio assets are used under Creative Commons by "<a href="https://otologic.jp/free/license.html">OtoLogic</a>"</p>
+    Audio assets are used under Creative Commons from <a href="https://otologic.jp/free/license.html">OtoLogic</a></p>
 
     <li><strong>Prototype Closest Other Game:</strong>
     </li>
@@ -83,7 +85,7 @@
     <li><strong>Prototype Goal:</strong>
     </li><p>The goals really revolved around demonstrating: two players being able to interact with the same objects on a screen, in a controlled fashion with expected inputs being guided.
         Visually and logically transferring control among the players and the game loop; interactive hexagonal tile system based on 2.5d x,y,z coordinates.
-        THe "look" and "feel" of a feature-complete game that fully implements the board game rules.</p>
+        THe "look" and "feel" of a feature-complete game that fully implements the board game rules. Finally to test the balance and envisioned rule-set of game. 
     <br>
     <p><b><u>The following are described in more detail in the labeled sections of the attached doc.</u></b></p>
     <li><strong>Player Experience Goals</strong>
@@ -96,10 +98,10 @@
     </li><br>
     <li><strong>Target Audience</strong>
     Competitive people of all ages, or even those just looking to have a casual battle of wits against their friends. The rules are really simple enough
-    to be accessable to really anyone, though maybe a little too calm and strategic for those you are into skill based games.
+    to be accessable to really anyone, though maybe a little too calm and strategic for those you are into skill based games. However, being a hex board makes the style of thinking more multi-lateral as compared to traditional board games.
     </li><br>
     <li><strong>Play Time:</strong>
-    Each round is very short, less than 2 mins. After fully implementing the second phase, the rounds should be more like 5 mins.
+    Each round is very short, taking less than 5 mins. Players may play with score being kept on the left until they meet their own score criteria.
     </li><br>
     <li><iframe src="./docs/royal_ambush.pdf" width="1280" height="800px">
     </iframe></li>
