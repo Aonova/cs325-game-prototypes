@@ -72,6 +72,8 @@ var HexBoard = (function () {
             numTiles += i * 6;
         this.escapeTile = new Array();
         this.initTiles();
+        if (DEBUG_MODE)
+            this.showDebugText();
     }
     HexBoard.prototype.initTiles = function (ms) {
         var _this = this;
@@ -97,7 +99,7 @@ var HexBoard = (function () {
                         }
                         else
                             this_1.tiles[x + "," + y + "," + z] = new Hex(this_1, { x: x, y: y, z: z }, type);
-                        delay(this_1.scene, ms / numTiles * tileNum++, this_1, function () { return _this.tiles[x + "," + y + "," + z].setHexState(HexState.normal); });
+                        delay(this_1.scene, ms / numTiles * tileNum++, this_1, function () { return _this.tiles[x + "," + y + "," + z].setState('normal'); });
                     }
                 };
                 for (var z = -this_1.size; z <= this_1.size; z++) {
@@ -115,6 +117,21 @@ var HexBoard = (function () {
         if (DEBUG_MODE)
             this.forEachTile(function (h) { return h.showDebugText(); });
     };
+    HexBoard.prototype.showDebugText = function () {
+        var pos = {
+            x: this.center.x - Math.cos(15) * this.radius * this.size * 2,
+            y: this.center.y + this.radius * this.size
+        };
+        this.debugText = this.scene.add.text(pos.x, pos.y, "init", { fontSize: '12px' });
+    };
+    HexBoard.prototype.pixelToTile = function (pos, strict) {
+        var offset_left = this.center.x - pos.x;
+        var offset_up = this.center.y - pos.y;
+        var hy = offset_left / Math.cos(15) / this.radius;
+        var hz = offset_up / this.radius / 1.5;
+        var hx = -hy - hz;
+        return { x: hx, y: hy, z: hz };
+    };
     HexBoard.prototype.forEachTile = function (callback) {
         for (var key in this.tiles) {
             var hex = this.tiles[key];
@@ -126,10 +143,10 @@ var HexBoard = (function () {
     };
     HexBoard.prototype.initMercs = function () {
         var _this = this;
-        var inter = 600;
+        var inter = 400;
         var _loop_4 = function (i) {
             delay(this_2.scene, inter * i, this_2, function () {
-                _this.escapeTile[i].setUnit(new Unit(_this.escapeTile[i], UnitType.merc));
+                _this.escapeTile[i].setUnit(new Unit(_this.escapeTile[i], UnitType.merc, 200, 100, 200));
             });
         };
         var this_2 = this;
@@ -176,19 +193,39 @@ var HexBoard = (function () {
             _loop_5(x);
         }
     };
+    HexBoard.prototype.getUnits = function (test) {
+        if (test === undefined)
+            test = function () { return true; };
+        var ret = [];
+        this.forEachTile(function (tile) { if (!tile.isEmpty() && test(tile.getUnit()))
+            ret.push(tile.getUnit()); });
+        return ret;
+    };
     return HexBoard;
 }());
+function colorTween(scene, object, toColor, duration, callback) {
+    var fromColorObj = Phaser.Display.Color.IntegerToColor(object.fillColor);
+    var toColorObj = Phaser.Display.Color.IntegerToColor(toColor);
+    if (callback === undefined)
+        callback = function () { };
+    function getTweenColor() {
+        var tweenColor = Phaser.Display.Color.Interpolate.ColorWithColor(fromColorObj, toColorObj, 100, tween.getValue());
+        return Phaser.Display.Color.ObjectToColor(tweenColor).color;
+    }
+    var tween = scene.tweens.addCounter({
+        from: 0,
+        to: 100,
+        duration: duration,
+        ease: 'Sine',
+        onUpdate: function () { return object.fillColor = getTweenColor(); },
+        onComplete: callback
+    });
+    return tween;
+}
 function cloneVec(vec) {
     var ret = { x: vec.x, y: vec.y, z: vec.z };
     return ret;
 }
-var HexState;
-(function (HexState) {
-    HexState[HexState["normal"] = 0] = "normal";
-    HexState[HexState["bright"] = 1] = "bright";
-    HexState[HexState["dim"] = 2] = "dim";
-    HexState[HexState["hidden"] = 3] = "hidden";
-})(HexState || (HexState = {}));
 function delay(scene, ms, scope, callback) {
     scene.time.delayedCall(ms, callback, [], scope);
 }
@@ -197,7 +234,6 @@ var Hex = (function (_super) {
     function Hex(board, pos, type) {
         var _this = _super.call(this, board.scene, Hex.hexToScreenPos(board.center, board.radius, pos).x, Hex.hexToScreenPos(board.center, board.radius, pos).y, hexPoints(board.radius)) || this;
         _this.hType = HexType.normal;
-        _this.hState = HexState.normal;
         _this.unit = null;
         _this.debugText = null;
         _this.team = -1;
@@ -218,7 +254,7 @@ var Hex = (function (_super) {
                 break;
         }
         _this.setInteractive(_this.geom, Phaser.Geom.Polygon.Contains);
-        _this.setHexState(HexState.hidden);
+        _this.setState("hidden");
         return _this;
     }
     Hex.prototype.isEmpty = function () { return this.unit == null; };
@@ -285,7 +321,7 @@ var Hex = (function (_super) {
         this.debugText.setPosition(this.x, this.y)
             .setText(vecStr(this.hPos)
             + ("\ns[" + this.state + "]")
-            + (" u[" + (this.isEmpty() ? '-1' : this.unit.uType) + "]"));
+            + ("\nu[" + (this.isEmpty() ? '-1' : this.unit.uType) + "] t[" + this.team + "]"));
     };
     Hex.prototype.showDebugText = function () {
         if (this.debugText == null)
@@ -303,52 +339,62 @@ var Hex = (function (_super) {
     };
     Hex.prototype.updateTeam = function () {
         if (this.unit == null) {
-            if (this.hType == HexType.start)
+            if (this.hType == HexType.start) {
                 this.team = 1;
+                colorTween(this.scene, this, this.board.theme.ambusher, 500);
+            }
             else
                 this.team = -1;
         }
         else
             this.team = this.unit.team;
+        if (this.hType == HexType.start && this.team == 0) {
+            colorTween(this.scene, this, this.board.theme.start, 500);
+        }
     };
     Hex.prototype.isNeutral = function () {
         return (this.team == -1);
     };
     Hex.prototype.setUnit = function (unit) {
         this.unit = unit;
+        this.updateTeam();
         if (this.debugText != null)
             this.updateDebugText();
+        return this;
     };
     Hex.prototype.getUnit = function () {
         return this.unit;
     };
-    Hex.prototype.setHexState = function (state) {
-        var brd = this.board;
+    Hex.prototype.setState = function (state) {
         var self = this;
         self.off('pointerover').off('pointerout').off('pointerdown').off('pointerup');
         switch (state) {
-            case HexState.normal:
+            case 'normal':
                 Hex.popTween(self, 0.9, 0.5, 500);
                 self
-                    .on('pointerout', function () { Hex.popTween(self, 0.9, 0.5); })
-                    .on('pointerover', function () { Hex.popTween(self, 0.95, 0.8); });
+                    .on('pointerout', function () { Hex.popTween(self, 0.9, 0.5, 400); })
+                    .on('pointerover', function () { Hex.popTween(self, 0.95, 0.8, 400); })
+                    .input.dropZone = false;
                 break;
-            case HexState.dim:
+            case 'dim':
                 Hex.popTween(self, 0.5, 0.7, 500);
+                self.input.dropZone = false;
                 break;
-            case HexState.hidden:
+            case 'hidden':
                 Hex.popTween(self, 0, 0, 500);
+                self.input.dropZone = false;
                 break;
-            case HexState.bright:
+            case 'bright':
                 Hex.popTween(self, 0.98, 0.7, 500);
                 self
-                    .on('pointerout', function () { Hex.popTween(self, 0.98, 0.7); })
-                    .on('pointerover', function () { Hex.popTween(self, 0.8, 0.95); });
+                    .on('pointerout', function () { Hex.popTween(self, 0.98, 0.7, 400); })
+                    .on('pointerover', function () { Hex.popTween(self, 0.8, 0.95, 400); })
+                    .input.dropZone = true;
                 break;
             default:
                 break;
         }
-        this.state = state;
+        _super.prototype.setState.call(this, state);
         this.updateDebugText();
         return this;
     };
@@ -545,55 +591,82 @@ var Button = (function (_super) {
 }(Label));
 var Unit = (function (_super) {
     __extends(Unit, _super);
-    function Unit(hex, uType) {
+    function Unit(hex, uType, ms1, ms2, ms3) {
         var _this = _super.call(this, hex.board.scene, 0, 0, uType == UnitType.merc ? 'unit_merc' : uType == UnitType.guard ? 'unit_guard' : 'unit_king') || this;
         _this.uType = uType;
         _this.team = uType == UnitType.merc ? 1 : 0;
         _this.hex = hex;
+        _this.hex.setUnit(_this);
         _this.setOrigin(.5).setPosition(hex.x, hex.y);
         _this.setTint(_this.team == 0 ? hex.board.theme.royalty : hex.board.theme.ambusher);
-        _this.showGrand(300, 200, 300, 2);
+        _this.setInteractive({
+            draggable: true,
+            hitArea: new Phaser.Geom.Circle(_this.width / 2, _this.height / 2, _this.width / 2 * 0.9),
+            hitAreaCallback: Phaser.Geom.Circle.Contains
+        });
+        if (ms1 === undefined)
+            ms1 = 300, ms2 = 200, ms3 = 300;
+        _this.showGrand(ms1, ms2, ms3, 2);
         return _this;
     }
     Unit.prototype.checkCapture = function () {
         var _this = this;
-        var toCapture = new Array();
+        var toCapture = [];
         if (this.uType == UnitType.king)
             return toCapture;
         this.hex.forEachNbr(function (nbr, dir) {
             if (!nbr.isEmpty() && nbr.getUnit().team != _this.team) {
-                var buddies = new Array();
+                var buddies = [];
+                var directions = [];
                 var flanks = _this.hex.getNbrFlanks(dir);
                 var score = 0;
                 if (flanks.back != null && flanks.back.getTeam() == _this.team) {
-                    if (!flanks.back.isEmpty())
+                    if (!flanks.back.isEmpty()) {
                         buddies.push(flanks.back.getUnit());
+                        directions.push((dir + 3) % 6);
+                    }
                     score += 2;
                 }
                 else {
                     if (flanks.right != null && flanks.right.getTeam() == _this.team) {
-                        if (!flanks.right.isEmpty())
+                        if (!flanks.right.isEmpty()) {
                             buddies.push(flanks.right.getUnit());
+                            directions.push((dir + 4) % 6);
+                        }
                         score += 1;
                     }
                     if (flanks.left != null && flanks.left.getTeam() == _this.team) {
-                        if (!flanks.left.isEmpty())
+                        if (!flanks.left.isEmpty()) {
                             buddies.push(flanks.left.getUnit());
+                            directions.push((dir + 2) % 6);
+                        }
                         score += 1;
                     }
                 }
                 if (score > 1 || flanks.nbr.hType == HexType.escape && score > 0) {
-                    toCapture.push({ enemy: flanks.nbr.getUnit(), buddies: buddies });
+                    buddies.push(_this);
+                    directions.push(dir);
+                    toCapture.push({ enemy: flanks.nbr.getUnit(), buddies: buddies, directions: directions });
                 }
             }
         });
         return toCapture;
     };
-    Unit.prototype.showAttack = function (buddies, callback) {
-        buddies.push(this);
+    Unit.prototype.showAttack = function (buddies, directions, callback) {
+        var _this = this;
         this.scene.add.tween({
             targets: buddies, duration: 350, yoyo: true, onComplete: callback, onCompleteParams: this, ease: 'Sine',
             scale: this.scale * 1.2
+        });
+        buddies.forEach(function (unit, i) {
+            var x = Math.cos((60 - 60 * directions[i]) * Math.PI / 180) * unit.hex.board.radius / 1.5;
+            var y = Math.sin((60 - 60 * directions[i]) * Math.PI / 180) * unit.hex.board.radius / 1.5;
+            if (DEBUG_MODE)
+                console.log([vecStr(unit.hex.hPos), Dir[directions[i]]]);
+            _this.scene.add.tween({
+                targets: unit, duration: 350, yoyo: true, ease: 'Sine', x: unit.x + x, y: unit.y - y
+            });
+            unit.x;
         });
     };
     Unit.prototype.showDefeat = function (callback) {
@@ -609,6 +682,36 @@ var Unit = (function (_super) {
     Unit.prototype.destroy = function () {
         this.hex.setUnit(null);
         _super.prototype.destroy.call(this);
+    };
+    Unit.prototype.getLegalTiles = function () {
+        function getAllInDir(tile, dir) {
+            var nbr = tile.getNbr(dir);
+            if (nbr != null && nbr.isNeutral())
+                return [nbr].concat(getAllInDir(nbr, dir));
+            else
+                return [];
+        }
+        var ret = [];
+        for (var dir = 0; dir < 6; dir++) {
+            ret = ret.concat(getAllInDir(this.hex, dir));
+        }
+        return ret;
+    };
+    Unit.prototype.moveTo = function (newHex, duration) {
+        if (duration === undefined)
+            duration = 500;
+        if (!newHex.isEmpty())
+            throw Error('Cannot move unit to already occupied hex!');
+        this.hex.setUnit(null);
+        this.hex = newHex.setUnit(this);
+        this.scene.add.tween({ targets: this, duration: duration, ease: 'Sine', x: newHex.x, y: newHex.y });
+        return this;
+    };
+    Unit.prototype.moveHome = function (duration) {
+        if (duration === undefined)
+            duration = 500;
+        this.scene.add.tween({ targets: this, duration: duration, ease: 'Sine', x: this.hex.x, y: this.hex.y });
+        return this;
     };
     return Unit;
 }(Label));
@@ -631,7 +734,7 @@ var Demo = (function (_super) {
         _this.boardSize = 3;
         _this.scoreAmbusher = 0;
         _this.scoreRoyalty = 0;
-        _this.soundCounter = [0, 0];
+        _this.soundCounter = [0, 0, 0];
         return _this;
     }
     Demo.prototype.updateScore = function () {
@@ -647,6 +750,10 @@ var Demo = (function (_super) {
     Demo.prototype.playSoundDrum = function () {
         this.sound.play('drum' + this.soundCounter[1]++);
         this.soundCounter[1] %= 2;
+    };
+    Demo.prototype.playSoundMove = function () {
+        this.sound.play('move' + this.soundCounter[2]++);
+        this.soundCounter[2] %= 2;
     };
     Demo.prototype.preload = function () {
         this.load.image('title', 'assets/titlecard.png')
@@ -666,9 +773,12 @@ var Demo = (function (_super) {
             .audio('accent_battle', 'assets/horagai.mp3')
             .audio('victory', 'assets/victory.mp3')
             .audio('attack0', 'assets/attack1.mp3').audio('attack1', 'assets/attack2.mp3')
-            .audio('drum0', 'assets/drum1.wav').audio('drum1', 'assets/drum2.wav');
+            .audio('drum0', 'assets/drum1.wav').audio('drum1', 'assets/drum2.wav')
+            .audio('positive', 'assets/positive.wav').audio('negative', 'assets/negative.wav')
+            .audio('move0', 'assets/move1.wav').audio('move1', 'assets/move2.wav');
     };
     Demo.prototype.create = function () {
+        this.input.setTopOnly(false);
         this.bgm = this.sound.add('bgm_main', { loop: true, volume: 0.7 });
         this.bgm.play();
         this.initTitlePhase();
@@ -682,10 +792,12 @@ var Demo = (function (_super) {
         titleCard.show(800);
         delay(this, 800, this, function () { return confButton.show(800); });
         delay(this, 700, this, function () { return confButton.setOnClickOnce(onClickConfirm, _this); });
+        var scene = this;
         function onClickConfirm() {
             var _this = this;
             titleCard.hide(300);
             confButton.hide(300);
+            scene.sound.play('positive');
             delay(this, 400, this, function () { return _this.initDeployPhase(_this); });
         }
     };
@@ -717,7 +829,7 @@ var Demo = (function (_super) {
         delay(this, time += 200, this, function () { return board.initKing(); });
         delay(this, time += 700, this, function () { ambushCard.focus(true); royalCard.unfocus(true); });
         delay(this, time += 200, this, function () { return board.initMercs(); });
-        delay(this, time += 4200, this, function () { return royalTurn(0, board, scene); });
+        delay(this, time += 2800, this, function () { return royalTurn(0, board, scene); });
         function royalTurn(turn, board, scene) {
             var _this = this;
             ambushCard.unfocus(true);
@@ -727,13 +839,13 @@ var Demo = (function (_super) {
             setBrightOpenTeamHex(0, board);
             var _loop_8 = function (key) {
                 var hex = board.tiles[key];
-                if (hex.state != HexState.bright)
+                if (hex.state != 'bright')
                     return "continue";
                 hex.on('pointerup', function () {
                     hex.setUnit(new Unit(hex, UnitType.guard));
                     scene.playSoundDrum();
                     pending--;
-                    hex.setHexState(HexState.normal);
+                    hex.setState('normal');
                     if (pending == 0) {
                         resetState(board);
                         delay(hex.scene, 500, _this, doFinally);
@@ -755,7 +867,6 @@ var Demo = (function (_super) {
                         phaseCard.hide(1000);
                         delay(scene, 1200, _this, function () { phaseCard.destroy(); });
                         scene.initBattlePhase(scene, board, royalCard, ambushCard);
-                        console.log('Go to battle phase');
                     });
                 }
             }
@@ -768,7 +879,7 @@ var Demo = (function (_super) {
             setBrightOpenTeamHex(1, board);
             var _loop_9 = function (key) {
                 var hex = board.tiles[key];
-                if (hex.state != HexState.bright)
+                if (hex.state != 'bright')
                     return "continue";
                 hex.on('pointerup', function () {
                     scene.playSoundDrum();
@@ -786,26 +897,27 @@ var Demo = (function (_super) {
             }
         }
         function setBrightOpenTeamHex(team, board) {
+            var toRet = [];
             board.forEachTile(function (hex) {
-                var toRet = new Array();
                 if (!hex.isEmpty() && hex.getUnit().team == team) {
                     var nbrs = hex.getNbrs();
                     for (var i = 0; i < 6; i++) {
                         var nbr = nbrs[i];
                         if (nbr != null && nbr.isEmpty()) {
-                            nbr.setHexState(HexState.bright);
+                            nbr.setState('bright');
                             toRet.push(nbr);
                         }
                     }
                 }
-                else if (hex.isEmpty() && hex.state == HexState.normal)
-                    hex.setHexState(HexState.dim);
+                else if (hex.isEmpty() && hex.state == 'normal')
+                    hex.setState('dim');
             });
+            return toRet;
         }
         function resetState(board) {
             for (var key in board.tiles) {
                 var hex = board.tiles[key];
-                hex.setHexState(HexState.normal);
+                hex.setState('normal');
             }
         }
     };
@@ -813,6 +925,109 @@ var Demo = (function (_super) {
         var phaseCard = new Label(this, this.cameras.main.width - 10, 10, 'card_battle', { x: 1, y: 0 }, 0xffdd99).setScale(0.9);
         phaseCard.showGrand(400, 400, 400);
         scene.sound.play('accent_battle');
+        delay(scene, 1500, this, function () {
+            startTurn(board, Math.random() > 0.5 ? 0 : 1);
+        });
+        function startTurn(board, team) {
+            var _this = this;
+            if (team == 0) {
+                royalCard.focus(true);
+                ambushCard.unfocus(true);
+                scene.sound.play('accent_royalty');
+            }
+            else {
+                ambushCard.focus(true);
+                royalCard.unfocus(true);
+                scene.sound.play('accent_ambusher');
+            }
+            var friendly = board.getUnits(function (u) { return u.team == team; });
+            var enemy = board.getUnits(function (u) { return u.team != team; });
+            scene.input.setDraggable(enemy, false);
+            scene.input.setDraggable(friendly);
+            scene.input.on('dragstart', function (pnt, obj) {
+                var legal = obj.getLegalTiles();
+                legal.forEach(function (tile) { return tile.setState("bright"); });
+                board.forEachTile(function (tile) { if (tile.isNeutral() && tile.state != 'bright')
+                    tile.setState("dim"); });
+                obj.setAlpha(0.5).setDepth(3);
+            });
+            scene.input.on('drag', function (pnt, obj, dragX, dragY) {
+                obj.setPosition(dragX, dragY);
+            });
+            var dest = null;
+            scene.input.on('dragenter', function (p, o, target) { return dest = target; }).on('dragleave', function (p, o, target) { return dest = null; });
+            scene.input.on('dragend', function (pnt, obj) {
+                obj.setAlpha(1).setDepth(1);
+                board.forEachTile(function (hex) { return hex.setState('normal'); });
+                if (dest == null) {
+                    obj.moveHome(500);
+                    scene.sound.play('negative');
+                }
+                else {
+                    var winFlag = null;
+                    obj.moveTo(dest, 300);
+                    scene.playSoundMove();
+                    var tOffset = 400;
+                    if (dest.hType == HexType.escape)
+                        winFlag = 'royalty';
+                    var captures_1 = obj.checkCapture();
+                    var _loop_10 = function (i) {
+                        delay(scene, tOffset, _this, function () {
+                            obj.showAttack(captures_1[i].buddies, captures_1[i].directions);
+                            captures_1[i].enemy.showDefeat(function (tween, targets, u) { return u.destroy(); });
+                            scene.playSoundAttack();
+                        });
+                        tOffset += 800;
+                        if (captures_1[i].enemy.uType == UnitType.king)
+                            winFlag = "ambusher";
+                        if (i == captures_1.length - 1)
+                            tOffset += 300;
+                    };
+                    for (var i = 0; i < captures_1.length && winFlag == null; i++) {
+                        _loop_10(i);
+                    }
+                    scene.input.off('dragstart').off('drag').off('dragenter').off('dragleave').off('dragend');
+                    if (winFlag == null)
+                        delay(scene, tOffset, _this, function () { return startTurn(board, team == 0 ? 1 : 0); });
+                    else {
+                        if (DEBUG_MODE)
+                            console.log([vecStr(dest.hPos), winFlag]);
+                        var imageTag_1 = null;
+                        if (winFlag == 'ambusher') {
+                            scene.scoreAmbusher++;
+                            imageTag_1 = 'win_ambusher';
+                        }
+                        else {
+                            scene.scoreRoyalty++;
+                            imageTag_1 = 'win_royalty';
+                        }
+                        delay(scene, tOffset, _this, function () {
+                            var winCard = scene.add.existing(new Label(scene, scene.cameras.main.centerX, scene.cameras.main.centerY, imageTag_1))
+                                .setOrigin(0.5).show(500).setDepth(5);
+                            delay(scene, 500, _this, function () {
+                                winCard.setInteractive().on('pointerover', function () { this.focus(true); })
+                                    .on('pointerout', function () { this.focus(false); })
+                                    .once('pointerup', function () {
+                                    scene.updateScore();
+                                    scene.sound.play('positive');
+                                    winCard.off('pointerover').off('pointerout').hide(300);
+                                    var units = board.getUnits();
+                                    units.forEach(function (unit) { return unit.hide(300); });
+                                    phaseCard.hide(300);
+                                    delay(scene, 400, _this, function () {
+                                        winCard.destroy;
+                                        units.forEach(function (unit) { return unit.destroy(); });
+                                        phaseCard.destroy();
+                                        scene.initDeployPhase(scene, board, royalCard, ambushCard);
+                                    });
+                                });
+                            });
+                            scene.sound.play('victory');
+                        });
+                    }
+                }
+            });
+        }
     };
     return Demo;
 }(Phaser.Scene));

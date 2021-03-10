@@ -1,3 +1,4 @@
+import { Scene } from "phaser"
 import "./phaser.js"
 
 const DEBUG_MODE = false
@@ -70,11 +71,13 @@ class HexBoard{
     /** Reference to the scene the board is to be rendered in */
     scene: Phaser.Scene
     /** Under-laying collection of hex tiles. Keys are string in form 'x,y,z' */
-    tiles: Object = {}
+    tiles: {[key:string]:Hex} = {}
     /** Special reference to start tile */
     startTile: Hex
     /** Special references to escape tiles */
     escapeTile: Hex[]
+    /** Debug text object */
+    debugText: Phaser.GameObjects.Text
     /** Creates and initializes the board tiles. Takes about 2 seconds for the animations */
     constructor(scene:Phaser.Scene,size:integer,radius:number,center?:Vec2,theme?:BoardColor) {
         this.scene = scene
@@ -89,6 +92,7 @@ class HexBoard{
             numTiles+=i*6
         this.escapeTile = new Array<Hex>()
         this.initTiles()
+        if (DEBUG_MODE) this.showDebugText()
     }
     /** Initializes and shows tiles over the specified duration. Default is about 1.5 secs including fadeout time. */
     private initTiles(ms?:number) {
@@ -112,12 +116,34 @@ class HexBoard{
                             this.startTile = this.tiles[`${x},${y},${z}`] = new Hex(this, {x:x,y:y,z:z}, type)
                         }
                         else this.tiles[`${x},${y},${z}`] = new Hex(this, {x:x,y:y,z:z}, type)
-                        delay(this.scene,ms/numTiles*tileNum++,this,()=>this.tiles[`${x},${y},${z}`].setHexState(HexState.normal))
+                        delay(this.scene,ms/numTiles*tileNum++,this,()=>this.tiles[`${x},${y},${z}`].setState('normal'))
                     }
                 }
             }
         }
         if (DEBUG_MODE) this.forEachTile(h=>h.showDebugText())
+    }
+    showDebugText() {
+        let pos = {
+            x:this.center.x - Math.cos(15) * this.radius * this.size * 2, 
+            y:this.center.y + this.radius * this.size}
+        this.debugText = this.scene.add.text(pos.x,pos.y,`init`,{fontSize:'12px'})
+    }
+    /**
+     * An efficient way to do hit detection for tiles on the board, rather than every tile checking.
+     * @param pos scene position to convert from
+     * @param strict if true, check against hex object current bounds (including scale, etc). Default false.
+     * @returns the Hex tile that overlaps that position, or null if out of bounds
+     */
+    pixelToTile(pos:Vec2,strict?:boolean): Vec3{ // STILL BROKEN, DON'T USE
+
+        let offset_left = this.center.x - pos.x
+        let offset_up = this.center.y - pos.y
+        let hy = offset_left / Math.cos(15) / this.radius  
+        let hz = offset_up / this.radius / 1.5
+        let hx = -hy - hz
+        
+        return {x:hx,y:hy,z:hz}
     }
     /**
      * Shortcut to perform a function for each tile on the board
@@ -133,12 +159,12 @@ class HexBoard{
     initKing() {
         this.startTile.setUnit(new Unit(this.startTile,UnitType.king))
     }
-     /** Initializes the king piece with a visual flourish taking 3.6 secs*/
+     /** Initializes the king piece with a visual flourish taking 2.4 secs*/
     initMercs() {
-        let inter = 600
+        let inter = 400
         for (let i=0; i<6; i++) {
             delay(this.scene,inter*i,this,()=>{
-                this.escapeTile[i].setUnit(new Unit(this.escapeTile[i],UnitType.merc))
+                this.escapeTile[i].setUnit(new Unit(this.escapeTile[i],UnitType.merc,200,100,200))
             })
         }
     }
@@ -177,22 +203,54 @@ class HexBoard{
             }
         }
     }
+    /** Returns units on the board which pass the specified test function. Default: get all units. */
+    getUnits(test?:(unit:Unit)=>boolean): Unit[] {
+        if (test===undefined) test = ()=>true
+        let ret: Unit[] = []
+        this.forEachTile((tile) => {if (!tile.isEmpty() && test(tile.getUnit())) ret.push(tile.getUnit()) })
+        return ret
+    }
+
+}
+/**
+ * Animates a shape object fill color to the given color over the given duration
+ * @param scene Scene to attach tween
+ * @param object shape object to tween fill color
+ * @param toColor color to tween to
+ * @param duration duration of tween in ms
+ * @param callback optional oncomplete callback given (tween, target object) parameters 
+ * @returns the tween object
+ */
+function colorTween(scene:Phaser.Scene,object:Phaser.GameObjects.Shape,toColor:number, duration:number,
+    callback?:(tween:Phaser.Tweens.Tween,targets:Phaser.GameObjects.Shape[])=>void): Phaser.Tweens.Tween
+{   
+    let fromColorObj = Phaser.Display.Color.IntegerToColor(object.fillColor)
+    let toColorObj = Phaser.Display.Color.IntegerToColor(toColor)
+    if (callback===undefined) callback = ()=>{} // noop
+    function getTweenColor()
+    {
+        let tweenColor = Phaser.Display.Color.Interpolate.ColorWithColor(
+            fromColorObj,
+            toColorObj,
+            100,
+            tween.getValue()
+        )
+        return Phaser.Display.Color.ObjectToColor(tweenColor).color;
+    }
+    let tween = scene.tweens.addCounter({
+        from: 0,
+        to: 100,
+        duration: duration,
+        ease: 'Sine',
+        onUpdate: ()=>object.fillColor=getTweenColor() ,
+        onComplete: callback
+    })
+    return tween
 }
 /** Returns a clone of a vector object. */
 function cloneVec(vec: Vec3) : Vec3 {
     let ret = {x:vec.x,y:vec.y,z:vec.z}
     return ret
-}
-/** Visual and interactive states of a hex tile */
-enum HexState { 
-    /** Regular visuals and slight pop effect on mouseover. Not a drop target. */
-    normal,
-    /** Pop visuals, slight un-pop effect on mouseover. Active drop target. */
-    bright,
-    /** Subdued visuals, no effect on mouseover. Not a drop target. */
-    dim,
-    /** Hidden, not yet shown, not interactive (default) */
-    hidden
 }
 function delay(scene:Phaser.Scene,ms:number,scope,callback:Function) {
     scene.time.delayedCall(ms,callback,[],scope)
@@ -205,14 +263,12 @@ class Hex extends Phaser.GameObjects.Polygon {
     board: HexBoard
     /** Hex type, under the rules of the game */
     hType: HexType = HexType.normal
-    /** State of the tile, determining visuals and interactivity. */
-    hState: HexState = HexState.normal
     /** The inhabiting unit on this tile, or null if empty. */
     private unit: Unit = null
     /** Debug text drawn atop the hex */
     debugText: Phaser.GameObjects.Text = null
     /** 
-     * Creates new hex, and backing polygon.
+     * Creates new hex, and backing polygon. Starts off as hidden.
      * @param board The hex board under which this hex tile is being made
      * @param pos The position of this tile on the board in xyz hex coordinates. 
      */
@@ -235,7 +291,7 @@ class Hex extends Phaser.GameObjects.Polygon {
         }
         this.setInteractive(this.geom,Phaser.Geom.Polygon.Contains)
 
-        this.setHexState(HexState.hidden)
+        this.setState("hidden")
     }
     /** Returns true if there is no unit on this tile */
     isEmpty(): boolean {return this.unit==null}
@@ -298,7 +354,7 @@ class Hex extends Phaser.GameObjects.Polygon {
         this.debugText.setPosition(this.x,this.y)
             .setText(vecStr(this.hPos)
                 +`\ns[${this.state}]`
-                +` u[${this.isEmpty()?'-1':this.unit.uType}]`)
+                +`\nu[${this.isEmpty()?'-1':this.unit.uType}] t[${this.team}]`)
     }   
     showDebugText() {
         if (this.debugText==null) // init if not exist 
@@ -316,59 +372,72 @@ class Hex extends Phaser.GameObjects.Polygon {
     getTeam(): -1|0|1 {
         return this.team
     }
-    /** Update team according to inhabiting unit. Should be called whenever unit gets changed. */
+    /** Update team according to inhabiting unit. Should be called whenever unit gets changed. Slightly changes color according to team.*/
     private updateTeam() {
         if (this.unit==null) {
-            if (this.hType == HexType.start) this.team = 1 // start tile counts as ambusher when empty
+            if (this.hType == HexType.start) {
+                this.team = 1 // start tile counts as ambusher when empty
+                colorTween(this.scene,this,this.board.theme.ambusher,500) // change color of start tile on move
+            }
             else this.team = -1
         }
         else this.team = this.unit.team
+        if (this.hType == HexType.start && this.team==0) { // reset color on board reset (king getting placed automatically on start tile)
+            colorTween(this.scene,this,this.board.theme.start,500)
+        }
     }
     /** Returns true if this tile is not yet captured by either team. Short for getTeam()==-1 */
     isNeutral(): boolean {
         return (this.team==-1)
     }
     /** Change the unit attached to the hex. Set to null to detach unit. */
-    setUnit(unit:Unit) {
+    setUnit(unit:Unit): this {
         this.unit = unit
+        this.updateTeam()
         if (this.debugText!=null) this.updateDebugText()
+        return this
     }
     /** Get unit object attached to this hex */
     getUnit(): Unit {
         return this.unit   
     }
-    
-    /** Changes state of the hex, affecting interactivity and visuals. Includes a 500 ms transition. */
-    setHexState(state:HexState): Hex{
-        let brd = this.board
+    /**
+     * @override Visual state of the Hex. Controls appearance and visual response to mouse-overs. 'bright' also enables drop zone.
+     */
+    setState(state:'normal'|'dim'|'hidden'|'bright'): this {
         var self = <Hex>this
         self.off('pointerover').off('pointerout').off('pointerdown').off('pointerup')
         switch (state) {
-            case HexState.normal:
+            case 'normal':
                 Hex.popTween(self,0.9,0.5,500)
                 self
-                .on('pointerout', () => {Hex.popTween(self,0.9,0.5)})
-                .on('pointerover', () => {Hex.popTween(self,0.95,0.8)})
+                .on('pointerout', () => {Hex.popTween(self,0.9,0.5,400)})
+                .on('pointerover', () => {Hex.popTween(self,0.95,0.8,400)})
+                .input.dropZone = false
                 break
-            case HexState.dim:
+            case 'dim':
                 Hex.popTween(self,0.5,0.7,500)
+                self.input.dropZone = false
                 break
-            case HexState.hidden:
+            case 'hidden':
                 Hex.popTween(self,0,0,500)
+                self.input.dropZone = false
                 break
-            case HexState.bright:
+            case 'bright':
                 Hex.popTween(self,0.98,0.7,500)
                 self
-                .on('pointerout', () => {Hex.popTween(self,0.98,0.7)})
-                .on('pointerover', () => {Hex.popTween(self,0.8,0.95)})
+                .on('pointerout', () => {Hex.popTween(self,0.98,0.7,400)})
+                .on('pointerover', () => {Hex.popTween(self,0.8,0.95,400)})
+                .input.dropZone = true
                 break
             default:
                 break
         }
-        this.state = state
+        super.setState(state)
         this.updateDebugText()
         return this
     }
+
     remove() {
         this.removeInteractive()
         Hex.popTween(this,0,0,500,()=>{
@@ -530,15 +599,21 @@ class Unit extends Label {
     hex: Hex
     /** Base color */
     /** Creates a Unit at the specified tile, with a flourishing entrance taking 700 ms */
-    constructor(hex:Hex,uType:UnitType) {
+    constructor(hex:Hex,uType:UnitType,ms1?,ms2?,ms3?) {
         super(hex.board.scene,0,0,uType==UnitType.merc?'unit_merc':uType==UnitType.guard?'unit_guard':'unit_king')
         this.uType = uType
         this.team = uType==UnitType.merc? 1 : 0
         this.hex = hex
+        this.hex.setUnit(this)
         this.setOrigin(.5).setPosition(hex.x,hex.y)
         this.setTint(this.team==0?hex.board.theme.royalty:hex.board.theme.ambusher)
-        
-        this.showGrand(300,200,300,2)
+        this.setInteractive({
+            draggable:true,
+            hitArea:new Phaser.Geom.Circle(this.width/2,this.height/2,this.width/2*0.9),
+            hitAreaCallback: Phaser.Geom.Circle.Contains
+        })
+        if (ms1===undefined) ms1=300,ms2=200,ms3=300
+        this.showGrand(ms1,ms2,ms3,2)
     }
     /** Check if any adjacent enemy units can be captured.
      *  Should be called after the player moves the unit on their turn.
@@ -546,45 +621,65 @@ class Unit extends Label {
      *  Has no persistent effect, simply generates capture objects and returns them. 
      *  @returns array of capture objects, with 'enemy' captured and array of 'buddies' who flanked
     */
-    checkCapture(): {enemy:Unit,buddies:Unit[]}[] {
-        let toCapture = new Array<{enemy:Unit,buddies:Unit[]}>()
+    checkCapture(): {enemy:Unit,buddies:Unit[],directions:Dir[]}[] {
+        let toCapture: {enemy:Unit,buddies:Unit[],directions:Dir[]}[] = []
         if (this.uType==UnitType.king) return toCapture// Kings cannot initiate capture
         this.hex.forEachNbr((nbr,dir)=>{
             if (!nbr.isEmpty() && nbr.getUnit().team != this.team) { // for each enemy unit neighbor
-                let buddies = new Array<Unit>()
+                let buddies: Unit[] = []
+                let directions: Dir[] = []
                 let flanks = this.hex.getNbrFlanks(dir)
                 let score = 0 // evaluate flanking score -> abstraction of flank rules
                 if (flanks.back!=null && flanks.back.getTeam() == this.team) {
-                    if (!flanks.back.isEmpty()) buddies.push(flanks.back.getUnit())
+                    if (!flanks.back.isEmpty()) {
+                        buddies.push(flanks.back.getUnit())
+                        directions.push((dir+3)%6)
+                    }
                     score+=2
                 }
                 else {
                     if (flanks.right!=null && flanks.right.getTeam() == this.team) {
-                        if (!flanks.right.isEmpty()) buddies.push(flanks.right.getUnit())
+                        if (!flanks.right.isEmpty()) {
+                            buddies.push(flanks.right.getUnit())
+                            directions.push((dir+4)%6)
+                        }
                         score+=1
                     }
                     if (flanks.left!=null && flanks.left.getTeam() == this.team) {
-                        if (!flanks.left.isEmpty()) buddies.push(flanks.left.getUnit())
+                        if (!flanks.left.isEmpty()) {
+                            buddies.push(flanks.left.getUnit())
+                            directions.push((dir+2)%6)
+                        }
                         score+=1
                     }
                 }
                 if (score>1 || flanks.nbr.hType == HexType.escape && score>0) {// Special rule: allowance for escape hex
-                    toCapture.push({enemy:flanks.nbr.getUnit(),buddies:buddies}) 
+                    buddies.push(this); directions.push(dir)
+                    toCapture.push({enemy:flanks.nbr.getUnit(),buddies:buddies,directions:directions}) 
                 }
             }
         })
         return toCapture
     }
     /** A timed animation lasting 700ms representing a set of units overpowering an enemy. Optionally, calls passed function after completion.*/
-    showAttack(buddies:Array<Unit>,callback?:(unit:Unit)=>void) {
-        buddies.push(this)
+    showAttack(buddies:Unit[],directions:Dir[],callback?:(tween,targets:Unit[],unit:this)=>void) {
         this.scene.add.tween({
             targets:buddies, duration: 350, yoyo: true, onComplete: callback, onCompleteParams: this, ease: 'Sine',
             scale: this.scale * 1.2
         })
+        buddies.forEach((unit,i)=>{
+            let x = Math.cos((60-60*directions[i])*Math.PI/180) * unit.hex.board.radius/1.5
+            let y = Math.sin((60-60*directions[i])*Math.PI/180) * unit.hex.board.radius/1.5
+            if (DEBUG_MODE) console.log([vecStr(unit.hex.hPos),Dir[directions[i]]])
+            this.scene.add.tween({
+                targets:unit, duration: 350, yoyo: true, ease: 'Sine', x:unit.x+x, y:unit.y-y
+            })
+            unit.x
+        })
+        
     }
     /** A timed animation lasting 700ms representing a unit getting overpowered. Optionally, calls passed function after completion. */
-    showDefeat(callback?:(unit:Unit)=>void) {
+    showDefeat(callback?:(tween,targets:Unit[],unit:this)=>void) {
         this.scene.add.tween({    
             targets:this, duration: 350, yoyo: true, ease: 'Sine',
             scale: this.scale * 0.5
@@ -600,6 +695,38 @@ class Unit extends Label {
     destroy() {
         this.hex.setUnit(null)
         super.destroy()
+    }
+    /**
+     * Returns list of hex tiles to which this unit could legally move.
+     */
+    getLegalTiles(): Hex[] {
+        /** Recursively returns movable hexes in a direction; stops when blocked */
+        function getAllInDir(tile:Hex,dir:Dir): Hex[] {
+            let nbr = tile.getNbr(dir)
+            if (nbr!=null && nbr.isNeutral()) // units can only land/pass over neutral tiles
+                return [nbr].concat(getAllInDir(nbr,dir))
+            else return []
+        }
+        let ret = []
+        for (let dir=0;dir<6; dir++) {
+            ret = ret.concat(getAllInDir(this.hex,dir))
+        }
+        return ret
+    }
+    /** Changes the home tile of this unit logically. Smoothly moves unit to location of new tile.*/
+    moveTo(newHex:Hex,duration?:number): this {
+        if (duration===undefined) duration = 500
+        if (!newHex.isEmpty()) throw Error('Cannot move unit to already occupied hex!')
+        this.hex.setUnit(null)
+        this.hex = newHex.setUnit(this)
+        this.scene.add.tween({targets:this,duration:duration,ease:'Sine',x:newHex.x,y:newHex.y})
+        return this
+    }
+    /** Smoothly animates unit back to the location of its home tile */
+    moveHome(duration?:number): this {
+        if (duration===undefined) duration = 500
+        this.scene.add.tween({targets:this,duration:duration,ease:'Sine',x:this.hex.x,y:this.hex.y})
+        return this
     }
 }
 /** 
@@ -636,7 +763,7 @@ class Demo extends Phaser.Scene {
     /** Looping background music */
     bgm: Phaser.Sound.BaseSound
     /** Variations for certain sound effects */
-    private soundCounter = [0,0]
+    private soundCounter = [0,0,0]
     /** Play alternating 'attack' sfx */
     playSoundAttack() {
         this.sound.play('attack'+this.soundCounter[0]++)
@@ -646,6 +773,11 @@ class Demo extends Phaser.Scene {
     playSoundDrum() {
         this.sound.play('drum'+this.soundCounter[1]++)
         this.soundCounter[1] %= 2
+    }
+    /** Play alternating 'move drum' sfx */
+    playSoundMove() {
+        this.sound.play('move'+this.soundCounter[2]++)
+        this.soundCounter[2] %= 2
     }
     constructor() {
         super('demo');
@@ -670,9 +802,12 @@ class Demo extends Phaser.Scene {
             .audio('victory','assets/victory.mp3')
             .audio('attack0','assets/attack1.mp3').audio('attack1','assets/attack2.mp3')
             .audio('drum0','assets/drum1.wav').audio('drum1','assets/drum2.wav')
+            .audio('positive','assets/positive.wav').audio('negative','assets/negative.wav')
+            .audio('move0','assets/move1.wav').audio('move1','assets/move2.wav')
     }
     
     create() {
+        this.input.setTopOnly(false)
         this.bgm = this.sound.add('bgm_main',{loop:true,volume:0.7})
         this.bgm.play()
         this.initTitlePhase()
@@ -687,9 +822,11 @@ class Demo extends Phaser.Scene {
         titleCard.show(800)
         delay(this,800,this,()=>confButton.show(800))
         delay(this,700,this,()=>confButton.setOnClickOnce(onClickConfirm,this))
+        let scene = this
         function onClickConfirm() {
             titleCard.hide(300)
-            confButton.hide(300);
+            confButton.hide(300)
+            scene.sound.play('positive')
             delay(this,400,this,()=>this.initDeployPhase(<Demo>this))
         }
     }
@@ -721,7 +858,7 @@ class Demo extends Phaser.Scene {
         delay(this,time+=200,this,()=>board.initKing())
         delay(this,time+=700,this,()=>{ambushCard.focus(true);royalCard.unfocus(true)})
         delay(this,time+=200,this,()=>board.initMercs())
-        delay(this,time+=4200,this,()=>royalTurn(0,board,scene))
+        delay(this,time+=2800,this,()=>royalTurn(0,board,scene))
 
         /** Even turns for royal team */
         function royalTurn(turn:number,board:HexBoard,scene:Demo){
@@ -731,12 +868,12 @@ class Demo extends Phaser.Scene {
             setBrightOpenTeamHex(0,board)
             for (const key in board.tiles) { // set bright hexes clickable - placing a unit
                 const hex = <Hex>board.tiles[key]
-                if (hex.state != HexState.bright) continue
+                if (hex.state != 'bright') continue
                 hex.on('pointerup',()=>{
                     hex.setUnit( new Unit(hex,UnitType.guard) )
                     scene.playSoundDrum()
                     pending--
-                    hex.setHexState(HexState.normal)
+                    hex.setState('normal')
                     if (pending==0) {
                         resetState(board)
                         delay(hex.scene,500,this,doFinally)
@@ -751,7 +888,6 @@ class Demo extends Phaser.Scene {
                         phaseCard.hide(1000)
                         delay(scene,1200,this,()=>{phaseCard.destroy()})
                         scene.initBattlePhase(scene,board,royalCard,ambushCard)
-                        console.log('Go to battle phase')
                     })
                 }
             }
@@ -763,7 +899,7 @@ class Demo extends Phaser.Scene {
             setBrightOpenTeamHex(1,board)
             for (const key in board.tiles) { // set bright hexes clickable - placing a unit
                 const hex = <Hex>board.tiles[key]
-                if (hex.state != HexState.bright) continue
+                if (hex.state != 'bright') continue
                 hex.on('pointerup',()=>{
                     scene.playSoundDrum()
                     hex.setUnit(new Unit(hex,UnitType.merc))
@@ -776,26 +912,27 @@ class Demo extends Phaser.Scene {
             }
         }
         /** Sets team adj open hexes to be bright, and other to be dim, taking 500 ms. Occupied hexes are normal. Returns brightened hexes */
-        function setBrightOpenTeamHex(team:number, board:HexBoard) {
+        function setBrightOpenTeamHex(team:0|1, board:HexBoard): Hex[] {
+            let toRet:Hex[] = []
             board.forEachTile(hex=>{
-                let toRet = new Array()
                 if (!hex.isEmpty() && hex.getUnit().team==team) { // team occupied hex
                     let nbrs = hex.getNbrs()
                     for (let i=0; i<6; i++) {
                         let nbr = nbrs[i] 
                         if (nbr!=null && nbr.isEmpty()) {
-                            nbr.setHexState(HexState.bright)
+                            nbr.setState('bright')
                             toRet.push(nbr)
                         } // unoccupied team-adjacent hex 
                     }
-                } else if (hex.isEmpty() && hex.state==HexState.normal) hex.setHexState(HexState.dim) // unoccupied neutral hex
+                } else if (hex.isEmpty() && hex.state=='normal') hex.setState('dim') // unoccupied neutral hex
             })
+            return toRet
         }
         /** Sets all the board tiles to be normal, clearing on-clicks as usual. */
         function resetState(board:HexBoard) {
             for (const key in board.tiles) {
                 const hex = <Hex>board.tiles[key]
-                hex.setHexState(HexState.normal)
+                hex.setState('normal')
             }
         }
     }
@@ -804,14 +941,93 @@ class Demo extends Phaser.Scene {
         let phaseCard = new Label(this,this.cameras.main.width-10,10,'card_battle',{x:1,y:0},0xffdd99).setScale(0.9)
         phaseCard.showGrand(400,400,400)
         scene.sound.play('accent_battle')
-        // random select which team goes first
-        if (Math.random()*100 > 50) royalTurn(board)
-        else ambushTurn(board)
-        function royalTurn(board:HexBoard) {
+        delay(scene,1500,this,()=>{
+            // randomly select which team goes first
+            startTurn(board, Math.random()>0.5 ? 0 : 1)
+        })
 
-        }
-        function ambushTurn(board:HexBoard) {
-
+        function startTurn(board:HexBoard,team:0|1) {
+            // show team card transition and accent sound
+            if (team == 0) {royalCard.focus(true);ambushCard.unfocus(true);scene.sound.play('accent_royalty')}
+            else {ambushCard.focus(true);royalCard.unfocus(true);scene.sound.play('accent_ambusher')}
+            let friendly = board.getUnits(u=>{return u.team == team})
+            let enemy = board.getUnits(u=>{return u.team != team})
+            scene.input.setDraggable(enemy,false)
+            scene.input.setDraggable(friendly)
+            scene.input.on('dragstart', (pnt,obj:Unit)=>{
+                let legal = obj.getLegalTiles()
+                legal.forEach(tile=>tile.setState("bright")) // brighten all the moveable tiles
+                board.forEachTile(tile=>{if (tile.isNeutral() && tile.state!='bright') tile.setState("dim")}) // dim all the empty non-movable tiles
+                obj.setAlpha(0.5).setDepth(3)
+            })
+            scene.input.on('drag',(pnt,obj:Unit,dragX:number,dragY:number)=>{ // have it follow the pointer
+                obj.setPosition(dragX,dragY)
+            })
+            let dest:Hex = null
+            scene.input.on('dragenter',(p,o,target:Hex)=>dest=target).on('dragleave',(p,o,target:Hex)=>dest=null)
+            scene.input.on('dragend',(pnt,obj:Unit)=>{
+                obj.setAlpha(1).setDepth(1)
+                board.forEachTile(hex=>hex.setState('normal'))
+                if (dest==null) { // not a valid drop target
+                    obj.moveHome(500)
+                    scene.sound.play('negative')
+                }
+                else { // on valid move
+                    let winFlag: null | 'royalty' | 'ambusher' = null
+                    obj.moveTo(dest,300)
+                    scene.playSoundMove()
+                    let tOffset = 400
+                    if (dest.hType == HexType.escape) winFlag = 'royalty'
+                    let captures = obj.checkCapture() // attempt capture at new position
+                    for (let i=0;i<captures.length && winFlag==null;i++) {
+                        delay(scene,tOffset,this,()=>{
+                            obj.showAttack(captures[i].buddies,captures[i].directions)
+                            captures[i].enemy.showDefeat((tween,targets,u)=>u.destroy())
+                            scene.playSoundAttack()
+                        })
+                        tOffset += 800
+                        if (captures[i].enemy.uType == UnitType.king)
+                            winFlag = "ambusher"
+                        if (i == captures.length - 1) tOffset += 300
+                    }
+                    scene.input.off('dragstart').off('drag').off('dragenter').off('dragleave').off('dragend')
+                    if (winFlag==null) delay(scene,tOffset,this,()=>startTurn(board,team==0?1:0))
+                    else {
+                        if (DEBUG_MODE) console.log([vecStr(dest.hPos),winFlag])
+                        let imageTag = null
+                        if (winFlag=='ambusher') {
+                            scene.scoreAmbusher++
+                            imageTag = 'win_ambusher'
+                        } else {
+                            scene.scoreRoyalty++
+                            imageTag = 'win_royalty'
+                        }
+                        delay(scene,tOffset,this,()=>{
+                            let winCard = scene.add.existing(new Label(scene,scene.cameras.main.centerX,scene.cameras.main.centerY,imageTag))
+                                .setOrigin(0.5).show(500).setDepth(5)
+                            delay(scene,500,this,()=>{
+                                winCard.setInteractive().on('pointerover',function(this:Label){this.focus(true)})
+                                .on('pointerout',function(this:Label){this.focus(false)})
+                                .once('pointerup',()=>{
+                                    scene.updateScore()
+                                    scene.sound.play('positive')
+                                    winCard.off('pointerover').off('pointerout').hide(300)
+                                    let units = board.getUnits()
+                                    units.forEach(unit=>unit.hide(300))
+                                    phaseCard.hide(300)
+                                    delay(scene,400,this,()=>{
+                                        winCard.destroy
+                                        units.forEach(unit=>unit.destroy())
+                                        phaseCard.destroy()
+                                        scene.initDeployPhase(scene,board,royalCard,ambushCard)
+                                    })
+                                })
+                            })
+                            scene.sound.play('victory')
+                        })
+                    }
+                }
+            })
         }
     }
 }
