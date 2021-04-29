@@ -8,6 +8,17 @@ class Main extends Phaser.Scene {
         this.load.image(Asset.buildUp,'res/buildUp.png')
         this.load.image(Asset.buildDown,'res/buildDown.png')
         this.load.image(Asset.forceArrow,'res/force.png')
+        this.load.image(Asset.digAction,'res/dig.png')
+        this.load.image(Asset.buildAction,'res/build.png')
+        this.load.audio(Asset.audioAlert,'res/sounds/alert.wav')
+        this.load.audio(Asset.audioBreak,'res/sounds/block-hit.wav')
+        this.load.audio(Asset.audioBGM,'res/sounds/bgm.mp3')
+        this.load.audio(Asset.audioQueue,'res/sounds/prime.wav')
+        this.load.audio(Asset.audioBuild,'res/sounds/build.wav')
+        this.load.audio(Asset.audioSelect,'res/sounds/select.mp3')
+        this.load.audio(Asset.audioDig,'res/sounds/dig.wav')
+        this.load.audio(Asset.audioForceBomb,'res/sounds/force.wav')
+        this.load.image(Asset.bombAction,'res/bomb.png')
     }
     testText:Phaser.GameObjects.Text = null
     create() {
@@ -44,6 +55,11 @@ class Main extends Phaser.Scene {
             onLoop: ()=>{
                 scene.time.delayedCall(tickSpeed/2,()=>{scene.events.emit(Event.tick)})
             }
+        })
+        const mainBGM = scene.sound.add(Asset.audioBGM,{loop:true})
+        /** Start the bgm on the first tick */
+        this.events.once(Event.tick,()=>{
+            mainBGM.play()
         })
         /** Every tick, run the logic of each turn's phases */
         this.events.on(Event.tick,()=>{
@@ -97,6 +113,7 @@ class Main extends Phaser.Scene {
             let winMsg = id==0?'LOSES by being knocked out!':'WINS by knocking out all opponents!'
             scene.add.text(cam.centerX,cam.centerY,'Player 0 '+winMsg,Theme.fontStandard)
                 .setOrigin(.5).setScale(1.5).setDepth(6)
+            scene.sound.play(Asset.audioAlert)
             scene.input.keyboard.destroy()
             scene.input.keyboard.once('keydown',()=>{scene.scene.start('TitleScreen')})
         })
@@ -130,7 +147,7 @@ class Main extends Phaser.Scene {
     /** Set key bindings to possible inputs: currently WASD and ctrl and shift */
     private bindKeys() {
         let KC = Phaser.Input.Keyboard.KeyCodes
-        let binding = {'up':KC.W, 'down':KC.S, 'left':KC.A, 'right':KC.D, 'out':KC.R, 'in':KC.F}
+        let binding = {'out':KC.UP, 'in':KC.DOWN}
         this.playerInput = <Inputs>this.input.keyboard.addKeys(binding)
     }
 }

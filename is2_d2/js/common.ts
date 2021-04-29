@@ -2,7 +2,18 @@
 export enum Asset {
     buildUp = 'buildUp',
     buildDown = 'buildDown',
-    forceArrow = 'force'
+    forceArrow = 'force',
+    audioAlert = 'alertA',
+    audioBreak = 'breakA',
+    audioForceBomb = 'forceBombA',
+    audioBuild = 'builda',
+    audioDig = 'digA',
+    audioQueue = 'queueA',
+    audioSelect = 'selectA',
+    audioBGM = 'bgm',
+    buildAction = 'buildAction',
+    digAction = 'digAction',
+    bombAction = 'bombAction'
 }
 /** Color and font configs */
 export class Theme {
@@ -57,7 +68,9 @@ export const SETTINGS = {
     /** Diameter of player piece ellipse */
     playerSize: 50,
     /** Milliseconds between tick - turn/game speed */
-    tickSpeed: 1000
+    tickSpeed: 1000,
+    /** Audio tune per player, in cents */
+    aTune: 300
 }
 /** Shared useful helper functions */
 export class Helper {
@@ -126,10 +139,6 @@ export class Helper {
 export const DEBUG = true
 /** Possible human player inputs bound to keys. */
 export type Inputs = {
-    up:Phaser.Input.Keyboard.Key, 
-    down:Phaser.Input.Keyboard.Key, 
-    left:Phaser.Input.Keyboard.Key, 
-    right:Phaser.Input.Keyboard.Key, 
     out:Phaser.Input.Keyboard.Key,
     in:Phaser.Input.Keyboard.Key
 }

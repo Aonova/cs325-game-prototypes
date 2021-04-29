@@ -1,4 +1,4 @@
-import { Theme, Helper, Event, Dir, SETTINGS } from './common.js';
+import { Theme, Helper, Event, Dir, SETTINGS, Asset } from './common.js';
 var Player = (function () {
     function Player(scene, id, size, start, inputs) {
         var _this = this;
@@ -20,49 +20,72 @@ var Player = (function () {
             .on(Event.phaseBuild, function () { _this.onBuild(); });
         if (this.inputs) {
             var me_1 = this;
-            this.inputs.out.on('down', function () {
+            var qa = me_1.queuedAction;
+            var queueAction_1 = function (out) {
                 if (me_1.queuedAction)
                     return;
                 if (me_1.hasBomb) {
-                    me_1.queuedAction = { action: 'force', offset: 1 };
-                    me_1.showTextMote('Queue Force-out');
+                    me_1.queuedAction = { action: 'force', offset: out ? 1 : -1 };
+                    me_1.icon.setTexture(Asset.bombAction).setScale(.6);
+                    me_1.scene.add.tween({
+                        targets: me_1.icon, scale: .4, alpha: .8, ease: 'Sine', duration: 400
+                    });
                 }
                 else {
-                    var dir = _this.getHeldDirInput();
+                    var dir = _this.getCardDirRelPointer();
                     if (dir == null)
                         return;
-                    me_1.queuedAction = { action: 'build', timeLeft: 1, offset: 1, dir: dir };
-                    me_1.showTextMote('Queue Build ' + Helper.dirToStr(dir));
+                    var qa_1 = me_1.queuedAction = { action: 'build', timeLeft: 1, offset: out ? 1 : -1, dir: dir };
+                    me_1.icon.setTexture(qa_1.offset == 1 ? Asset.buildAction : Asset.digAction).setScale(.6);
+                    me_1.icon2.obj.setTexture(qa_1.offset == 1 ? Asset.buildUp : Asset.buildDown).setScale(.6);
+                    var xyDir = Helper.dirToXY(qa_1.dir);
+                    me_1.icon2.offset = { x: xyDir.x * SETTINGS.tileSize, y: -xyDir.y * SETTINGS.tileSize };
+                    me_1.scene.add.tween({
+                        targets: [me_1.icon, me_1.icon2.obj], scale: .4, alpha: .8, ease: 'Sine', duration: 400
+                    });
                 }
-            });
-            this.inputs["in"].on('down', function () {
-                if (me_1.queuedAction)
-                    return;
-                if (me_1.hasBomb) {
-                    me_1.queuedAction = { action: 'force', offset: -1 };
-                    me_1.showTextMote('Queue Force-in');
-                }
-                else {
-                    var dir = _this.getHeldDirInput();
-                    if (dir == null)
-                        return;
-                    me_1.queuedAction = { action: 'build', timeLeft: 1, offset: -1, dir: dir };
-                    me_1.showTextMote('Queue Dig ' + Helper.dirToStr(dir));
-                }
-            });
+                _this.scene.sound.play(Asset.audioQueue);
+            };
+            this.inputs.out.on('down', function () { queueAction_1(true); });
+            this.inputs["in"].on('down', function () { queueAction_1(false); });
         }
+        this.icon = scene.add.image(this.obj.x, this.obj.y, Asset.digAction)
+            .setAlpha(0).setOrigin(.5).setScale(.4).setTint(Theme.playerColor[this.id] + 0x205025).setDepth(2);
+        this.icon2 = {
+            obj: scene.add.image(this.obj.x, this.obj.y, Asset.buildDown).setAlpha(0).setOrigin(.5)
+                .setTint(Theme.playerColor[this.id] + 0x205025).setScale(.4).setDepth(1),
+            offset: { x: 0, y: 0 }
+        };
+        var me = this;
+        var updateIconPos = function () {
+            if (!me || !me.obj || !me.icon || !me.icon2)
+                me.obj.scene.events.off('prerender', updateIconPos);
+            me.icon.setPosition(me.obj.x, me.obj.y).setAlpha(me.icon.alpha * me.obj.alpha);
+            me.icon2.obj.setPosition(me.obj.x + me.icon2.offset.x, me.obj.y + me.icon2.offset.y)
+                .setAlpha(me.icon2.obj.alpha * me.obj.alpha);
+        };
+        this.obj.scene.events.on('prerender', updateIconPos);
     }
-    Player.prototype.getHeldDirInput = function () {
-        var offset = { x: 0, y: 0 };
-        if (this.inputs.up.isDown)
-            offset.y++;
-        if (this.inputs.down.isDown)
-            offset.y--;
-        if (this.inputs.left.isDown)
-            offset.x--;
-        if (this.inputs.right.isDown)
-            offset.x++;
-        return Helper.xyToDir(offset);
+    Player.prototype.getCardDirRelPointer = function () {
+        var input = this.scene.input;
+        input.activePointer.updateWorldPoint(this.scene.cameras.main);
+        var pPos = { x: input.activePointer.worldX, y: input.activePointer.worldY };
+        var vec = new Phaser.Math.Vector2(pPos.x - this.obj.x, pPos.y - this.obj.y);
+        if (vec.length() < this.obj.width)
+            return null;
+        var theta = vec.angle();
+        var PI = Math.PI;
+        var dir = Dir.E;
+        if (theta > PI / 4)
+            dir = Dir.S;
+        if (theta > 3 * PI / 4)
+            dir = Dir.W;
+        if (theta > 5 * PI / 4)
+            dir = Dir.N;
+        if (theta > 7 * PI / 4)
+            dir = Dir.E;
+        console.log(dir);
+        return dir;
     };
     Player.prototype.showTextMote = function (msg) {
         var obj = this.obj;
@@ -78,17 +101,14 @@ var Player = (function () {
         if (!this.tile)
             return;
         var qa = this.queuedAction;
+        var me = this;
         if (qa)
             return;
         else if (this.inputs) {
-            if (this.inputs.up.isDown)
-                this.queuedAction = { action: 'move', dir: Dir.N };
-            else if (this.inputs.right.isDown)
-                this.queuedAction = { action: 'move', dir: Dir.E };
-            else if (this.inputs.down.isDown)
-                this.queuedAction = { action: 'move', dir: Dir.S };
-            else if (this.inputs.left.isDown)
-                this.queuedAction = { action: 'move', dir: Dir.W };
+            var dir = this.getCardDirRelPointer();
+            if (dir != null) {
+                this.queuedAction = { action: 'move', dir: dir };
+            }
         }
         else {
             while (this.queuedAction == null) {
@@ -106,7 +126,6 @@ var Player = (function () {
                 else {
                     if (this.hasBomb) {
                         var offset = randOut < .5 ? -1 : 1;
-                        this.showTextMote("Queue Force-" + (offset == 1 ? 'out' : 'in') + " " + Helper.dirToStr(dir));
                         this.queuedAction = { action: 'force', offset: offset };
                     }
                     else {
@@ -117,10 +136,27 @@ var Player = (function () {
                             offset = -1;
                         else if (tile.type == -1)
                             offset = 1;
-                        this.showTextMote("Queue " + (offset == 1 ? 'Build' : 'Dig') + " " + Helper.dirToStr(dir));
                         this.queuedAction = { action: 'build', offset: offset, dir: dir, timeLeft: 1 };
                     }
                 }
+            }
+            qa = this.queuedAction;
+            if (this.queuedAction.action != 'move')
+                this.scene.sound.play(Asset.audioQueue, { detune: SETTINGS.aTune });
+            if (this.queuedAction.action == 'build') {
+                this.icon.setTexture(qa.offset == 1 ? Asset.buildAction : Asset.digAction).setScale(.6);
+                this.icon2.obj.setTexture(qa.offset == 1 ? Asset.buildUp : Asset.buildDown).setScale(.6);
+                var xyDir = Helper.dirToXY(qa.dir);
+                this.icon2.offset = { x: xyDir.x * SETTINGS.tileSize, y: -xyDir.y * SETTINGS.tileSize };
+                this.scene.add.tween({
+                    targets: [me.icon, me.icon2.obj], scale: .4, alpha: .8, ease: 'Sine', duration: 400
+                });
+            }
+            else if (qa.action == 'force') {
+                me.icon.setTexture(Asset.bombAction).setScale(.6);
+                me.scene.add.tween({
+                    targets: me.icon, scale: .4, alpha: .8, ease: 'Sine', duration: 250
+                });
             }
         }
     };
@@ -129,6 +165,7 @@ var Player = (function () {
         if (!this.tile)
             return;
         var qa = this.queuedAction;
+        var me = this;
         if (qa && qa.action == 'force') {
             this.showTextMote('Force-' + (qa.offset == 1 ? 'out' : 'in'));
             this.hasBomb = false;
@@ -160,6 +197,10 @@ var Player = (function () {
             for (var i = 1; i <= Math.min(xDif, pos_1.y); i++)
                 addForceToTile(+i, -i, forceDir(Dir.NE));
             this.scene.events.emit(Event.bombSpawn, this.id);
+            me.scene.sound.play(Asset.audioForceBomb, me.id == 0 ? {} : { detune: SETTINGS.aTune });
+            me.scene.add.tween({
+                targets: me.icon, alpha: 0, scale: .6, duration: 250, ease: 'Sine', delay: me.id == 200 ? 0 : 250
+            });
         }
     };
     Player.prototype.onMove = function () {
@@ -176,6 +217,7 @@ var Player = (function () {
                 if (nbr && nbr.type == 1) {
                     me.obj.scene.time.delayedCall(400, function () {
                         nbr.setType(0);
+                        me.scene.sound.play(Asset.audioBreak);
                         nbr.showTextMote('Force-break!');
                     });
                     return "break";
@@ -220,6 +262,7 @@ var Player = (function () {
     Player.prototype.onBuild = function () {
         if (!this.tile)
             return;
+        var me = this;
         var qa = this.queuedAction;
         if (qa && qa.action == 'build') {
             if (qa.timeLeft > 0) {
@@ -227,8 +270,11 @@ var Player = (function () {
                 return;
             }
             this.tryBuildCard(qa.offset, qa.dir);
-            this.showTextMote((qa.offset == -1 ? 'Dig' : 'Build') + " " + Helper.dirToStr(qa.dir));
             this.queuedAction = null;
+            me.icon.setAlpha(1);
+            me.scene.tweens.add({
+                targets: [me.icon, me.icon2.obj], scale: .6, alpha: 0, ease: 'Sine', duration: 400
+            });
         }
     };
     Player.prototype.tryBuildCard = function (offset, dir) {
@@ -248,6 +294,7 @@ var Player = (function () {
         if (buildOn == null || Math.abs(buildOn.type + offset) > 1)
             return;
         buildOn.setType(buildOn.type + offset);
+        me.scene.sound.play(offset == -1 ? Asset.audioDig : Asset.audioBuild);
     };
     Player.prototype.getTile = function (dir) {
         var dxy = Helper.dirToXY(dir);
@@ -292,6 +339,7 @@ var Player = (function () {
             if (me.tile.bomb == me.id) {
                 me.scene.events.emit(Event.bombTaken, me.id, me.tile.pos);
                 me.hasBomb = true;
+                me.scene.sound.play(Asset.audioSelect, me.id == 0 ? {} : { detune: SETTINGS.aTune });
             }
         }
     };

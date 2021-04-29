@@ -3,6 +3,17 @@ export var Asset;
     Asset["buildUp"] = "buildUp";
     Asset["buildDown"] = "buildDown";
     Asset["forceArrow"] = "force";
+    Asset["audioAlert"] = "alertA";
+    Asset["audioBreak"] = "breakA";
+    Asset["audioForceBomb"] = "forceBombA";
+    Asset["audioBuild"] = "builda";
+    Asset["audioDig"] = "digA";
+    Asset["audioQueue"] = "queueA";
+    Asset["audioSelect"] = "selectA";
+    Asset["audioBGM"] = "bgm";
+    Asset["buildAction"] = "buildAction";
+    Asset["digAction"] = "digAction";
+    Asset["bombAction"] = "bombAction";
 })(Asset || (Asset = {}));
 var Theme = (function () {
     function Theme() {
@@ -51,7 +62,8 @@ export var SETTINGS = {
     boardHeight: 8,
     tileSize: 60,
     playerSize: 50,
-    tickSpeed: 1000
+    tickSpeed: 1000,
+    aTune: 300
 };
 var Helper = (function () {
     function Helper() {

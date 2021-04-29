@@ -28,6 +28,17 @@ var Main = (function (_super) {
         this.load.image(Asset.buildUp, 'res/buildUp.png');
         this.load.image(Asset.buildDown, 'res/buildDown.png');
         this.load.image(Asset.forceArrow, 'res/force.png');
+        this.load.image(Asset.digAction, 'res/dig.png');
+        this.load.image(Asset.buildAction, 'res/build.png');
+        this.load.audio(Asset.audioAlert, 'res/sounds/alert.wav');
+        this.load.audio(Asset.audioBreak, 'res/sounds/block-hit.wav');
+        this.load.audio(Asset.audioBGM, 'res/sounds/bgm.mp3');
+        this.load.audio(Asset.audioQueue, 'res/sounds/prime.wav');
+        this.load.audio(Asset.audioBuild, 'res/sounds/build.wav');
+        this.load.audio(Asset.audioSelect, 'res/sounds/select.mp3');
+        this.load.audio(Asset.audioDig, 'res/sounds/dig.wav');
+        this.load.audio(Asset.audioForceBomb, 'res/sounds/force.wav');
+        this.load.image(Asset.bombAction, 'res/bomb.png');
     };
     Main.prototype.create = function () {
         addBorder(this, 2);
@@ -63,6 +74,10 @@ var Main = (function (_super) {
             onLoop: function () {
                 scene.time.delayedCall(tickSpeed / 2, function () { scene.events.emit(Event.tick); });
             }
+        });
+        var mainBGM = scene.sound.add(Asset.audioBGM, { loop: true });
+        this.events.once(Event.tick, function () {
+            mainBGM.play();
         });
         this.events.on(Event.tick, function () {
             scene.tweens.addCounter(Helper.tweenFillStyle(tickBars, Theme.colorHL, Theme.colorTick, 500));
@@ -112,6 +127,7 @@ var Main = (function (_super) {
             var winMsg = id == 0 ? 'LOSES by being knocked out!' : 'WINS by knocking out all opponents!';
             scene.add.text(cam.centerX, cam.centerY, 'Player 0 ' + winMsg, Theme.fontStandard)
                 .setOrigin(.5).setScale(1.5).setDepth(6);
+            scene.sound.play(Asset.audioAlert);
             scene.input.keyboard.destroy();
             scene.input.keyboard.once('keydown', function () { scene.scene.start('TitleScreen'); });
         });
@@ -132,7 +148,7 @@ var Main = (function (_super) {
     };
     Main.prototype.bindKeys = function () {
         var KC = Phaser.Input.Keyboard.KeyCodes;
-        var binding = { 'up': KC.W, 'down': KC.S, 'left': KC.A, 'right': KC.D, 'out': KC.R, 'in': KC.F };
+        var binding = { 'out': KC.UP, 'in': KC.DOWN };
         this.playerInput = this.input.keyboard.addKeys(binding);
     };
     return Main;

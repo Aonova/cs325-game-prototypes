@@ -49,10 +49,6 @@ export class Tile {
         // add force arrow graphic
         this.forceArrow = scene.add.image(this.sPos.x,this.sPos.y,Asset.forceArrow).setOrigin(.5).setAlpha(0)
             .setScale(.25).setTint(Theme.colorHL).setDepth(3)
-        if (DEBUG) { //allow building/digging by clicking during debug mode
-            this.rect.setInteractive({useHandCursor:true})
-            this.rect.on('pointerup',()=>{this.setType(((this.type+2)%3)-1)})
-        }
         // show force graphics during move phase
         scene.events.on(Event.phaseMove,()=>{
             if (this.forceDir!=null) this.showForce(this.forceDir)

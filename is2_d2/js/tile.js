@@ -1,4 +1,4 @@
-import { Theme, Helper, DEBUG, SETTINGS, Asset, Event } from './common.js';
+import { Theme, Helper, SETTINGS, Asset, Event } from './common.js';
 var Tile = (function () {
     function Tile(scene, tDim, bPos, cPos, bDim, board) {
         var _this = this;
@@ -18,10 +18,6 @@ var Tile = (function () {
         this.rect = scene.add.rectangle(this.sPos.x, this.sPos.y, tDim.w * scale, tDim.h * scale, Theme.colorBG, 1).setOrigin(.5);
         this.forceArrow = scene.add.image(this.sPos.x, this.sPos.y, Asset.forceArrow).setOrigin(.5).setAlpha(0)
             .setScale(.25).setTint(Theme.colorHL).setDepth(3);
-        if (DEBUG) {
-            this.rect.setInteractive({ useHandCursor: true });
-            this.rect.on('pointerup', function () { _this.setType(((_this.type + 2) % 3) - 1); });
-        }
         scene.events.on(Event.phaseMove, function () {
             if (_this.forceDir != null)
                 _this.showForce(_this.forceDir);
