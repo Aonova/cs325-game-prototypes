@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Force Out!</title>
+    <link rel="stylesheet"  href="https://fonts.googleapis.com/css?family=Noto+Sans">
+    <link href="scripts/prism.css" rel="stylesheet"/>
+    <link href="scripts/tab.css" rel="stylesheet"/>
+    <link href="res/mystyle.css" rel="stylesheet"/>
+    <!-- Phaser engine -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.53.1/dist/phaser-arcade-physics.min.js"></script> 
+</head>
+<!--dummy comment-->
+<body>
+    <!-- Hack to load custom font before game -->
+    <div style="font-family:Arcade; position:absolute; left:-1000px; visibility:hidden;">.</div>
+<div id="game" style="min-height:720px;margin:auto;width:fit-content"></div>
+<div id="title">
+    <h2><b>Theta-315!</b></h2>
+    <h4>Note: this was originally developed as the Iteration Sequence 1 prototype, but slipped.</h4>
+    <div id="sourceprompt" 
+    onclick="
+        let src = this.parentElement.nextElementSibling; 
+        let active = src.style.display=='none';
+        src.style.display = active ? 'block' : 'none';
+        this.classList.toggle('active',active);">
+    Check out the source!</div>
+</div>
+<div id="source" class="line-numbers" style="display: none;">
+    <!-- Source code tab links: one tab button per source code file  -->
+    <div class='tab'>
+        <!-- (template) <button class="tablinks" onclick="openTab(event, '<<id-of-tab-div>>')"><<tab-text>></button> -->
+        <button class="tablinks active" onclick="openTab(event, 'main')">main.ts</button>
+        <button class="tablinks" onclick="openTab(event, 'tile')">tile.ts</button>
+        <button class="tablinks" onclick="openTab(event, 'player')">player.ts</button>
+        <button class="tablinks" onclick="openTab(event, 'common')">common.ts</button>
+    </div>
+    <!-- Source code tab content: one div per above tabs -->
+    <!-- (template) <div id='<<must-match-openTab-in-tab-buttons>>' class='tabcontent'>
+        <pre><code class='lang-typescript' id='<<must-match-fetchSource-in-codesample-js>>'></code></pre>
+    </div> -->
+    <div id='main' class='tabcontent' style="display: block;">
+        <pre><code class='lang-typescript' id='main.ts'></code></pre>   
+    </div>
+    <div id='tile' class='tabcontent'>
+        <pre><code class='lang-typescript' id='tile.ts'></code></pre>   
+    </div> 
+    <div id='player' class='tabcontent'>
+        <pre><code class='lang-typescript' id='player.ts'></code></pre>   
+    </div> 
+    <div id='common' class='tabcontent'>
+        <pre ><code class='lang-typescript' id='common.ts'></code></pre>   
+    </div>
+</div>
+<div id="readme">
+        <!-- Page   -->
+    <div style="margin-top:10px"></div>
+    <ul><li><h3>NOTE: Controls</h3>
+        <p>All actions happen on the beat. Hold down one of the WASD keys to do a movement in that direction. Press the [R] key plus a direction to queue a BUILD or [F] key to queue a DIG. If you have the bomb, [R] queues a FORCE PUSH and [F] queues a FORCE PULL. Force actions affect players in straight and diagonal lines to your position. NOTE: Currently need to reload page to play another round.</p></li>
+    <li><h3>Originality:</h3>
+        <p>Completely original game rules (inspired by Bomberman and Smash-bros) and unique beat-based real-time psuedo-turn system. Knock opponents out of the ring by picking up Force Bombs to push IN or OUT! BUILD walls or DIG holes to shape the battlefield in your favor! Force-moving your opponent out of the board or into a hole spells victory. Push them into walls to break them! Strategic yet fast-paced, possible to play with 2 to many players (currently demo-ed with a simple AI as player 2).
+        </p></li>
+    <li><h3>Technical Merit:</h3>
+        <p>Responsive design and animations, simple-yet-elegant graphics, clean-designed event-driven turn based system. Real-time turn-based action system follows a beat and allows players to queue up actions for turns and execute them simultaneously. Implemented a AI player logic, with decision heuristics against ineffective actions (tuning is still in early stages). Board terrain generation (currently a simple ring, but can use Perlin noise to generate walls and holes). Implements custom algorithms for abstract tile-base hit-detection and intersection. Random bomb spawns with bound logic, spawning away from players and towards middle of board. Responsive and configurable keyboard control system based on held keys where makes sense.</p></li>
+    <li><h3>Prototype Postmortem:</h3>
+        <p>I got to use self-defined events and a neat event-based game logic flow that documents itself I think. This type of implementation is quite a valuable experience for me. I do think my low-level implementation of the board as a 2d array of Tile objects was a bit hindering, I should have abstracted the board into its own class on used getters to avoid the re-occurring issue of getting unexpected undefined values when trying to iterate or get tiles in some direction versus another. I also find my control scheme (WASD+R+F) to not be the best. Maybe a mouse-based control scheme would be better (Move towards direction of mouse, left click for build/push, right click for dig/pull</p></li>
+    <li><h3>Prototype Assets:</h3>
+        <p>I created all assets used in this prototype, which are mostly generated in code.
+            Font is "Press Start 2P" used under Open Front License.
+        </p></li>
+    <li><h3>Prototype Closest Other Game:</h3>
+        <p>Lightly inspired from Bomberman (tile-based with walls and traps where you explode bombs) and Smash-bros (Win by pushing enemies off the map)</p></li>
+    <li><h3>High Concept:</h3>
+        <p>Force Out! (prototype name) is an exciting take on strategic pseudo-real-time competitive board game played between 2 to 4 players where players pick up and ignite ‘force bombs’ that push and pull to try and knock others out of bounds and remain the last one standing.</p></li>
+    <li><h3>Theme:</h3><p>Builder</p></li>
+    <li><h3>Mandated Variety:</h3><p>stub</p></li>
+    <li><h3>Prototype Goal:</h3><p>Demo the feel and basic ruleset of the game. Demo controls.</p></li>
+    <li><h3>Player Experience Goals</h3><p>Competative, but also with on-the-fly cooperation when competing players' goals align. Strategic but requires quick thinking and a time management. Ultimately intended to be a game played in an online party room.</p></li>
+    <li><h3>Gameplay</h3><p>
+        Players can MOVE, BUILD, or FORCE. These actions are all decided on a beat, simultaneously for all players. Players can chose to move on a turn, one tile in any cardinal direction that is level (not wall or hole). Players can pick up a bomb of their color which spawns randomly towards the middle of the board. Players holding a bomb can FORCE PUSH or PULL, which affects other players in a queens move from the user. This pushes players away or pulls them towards the user respectively. Players halt upon meeting a wall, which then breaks from the impact. Players lose upon meeting a hole trap, or being pushed out of bounds. Players can BUILD or DIG when not carrying a bomb, elevating a hole to floor/floor to wall or deconstructing wall to floor/floor to hole respectively.</p></li>
+    <li><h3>Strategies</h3><p>Naturally, having strong control of the center is important: You can catch bombs whenever they
+        respawn, and use them to push others away. However, playing too offensively means you give up the
+        opportunity to set up walls or holes – which gives up a whole turn of movement but gives field-changing
+        benefits. A wall or hole could play mind-tricks with your opponent, allowing you to read their moves
+        easier and take the advantage, perhaps wasting their force bomb and leaving you better placed.
+        As the game progresses, the border walls will naturally deplete as force-pushes knock players into them.
+        This gradually heats things up and prevents stagnating rounds – not unlike the force-fields closing in
+        Battle Royale games, but backwards. This makes bombs more and more potent as the game goes on.
+        The opponent’s bomb-spawner can be used as bait by a smart player.
+        Force pull I think should be used to pull players into a hole which someone dug in a previous round, or
+        to destroy a pesky wall in the field.
+        Bomb holders can just hold on to a bomb instead of using it, moving around with the normal two-card
+        mobility to play mind-games on the other players and better read and shepherd their moves.
+        </p></li>
+    <li><h3>Story/Setting/Premise</h3><p>stub</p></li>
+    <li><h3>Target Audience</h3><p>stub</p></li>
+    <li><h3>Play Time:</h3><p>2-5 mins per round</p></li>
+    </ul>
+</div>
+<!-- main.js must come at the end since it expects the HTML to have been created. -->
+<script src="js/main.js" type="module"></script>
+<!-- On page source code -->
+<script src="scripts/prism.js"></script>
+<script src="scripts/codesamples.js"></script>
+</body>
+</html>

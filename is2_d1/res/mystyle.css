@@ -1,0 +1,57 @@
+@font-face {
+    font-family: 'DotGothic16';
+    src: url('DotGothic16-Regular.woff2') format('woff2'),
+        url('DotGothic16-Regular.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'PressStart2P';
+    src: url('PressStart2P-vaV7.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Arcade';
+    src: url('ARCADE.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+body
+{   background-color: rgb(22, 22, 22);
+    color: #fff;
+    font-family: 'Noto Sans',sans-serif;
+}
+h3,b{color:goldenrod;}
+div#readme,div#source,div#title
+{
+    margin-top: 10px;
+}
+div#title, div#readme {
+    min-width: 1280px;
+    width: 75%;
+    margin: auto; 
+}
+div#source {
+    min-width: 1280px;
+    width: 85%;
+    margin: auto;
+}
+div#sourceprompt {
+    padding: 5px 25px;
+    width: fit-content;
+    color: goldenrod;
+    background-color: rgb(45,45,45);
+    user-select: none;
+    cursor: pointer;
+}
+div#sourceprompt:hover {
+    background-color: #535353;
+}
+div#sourceprompt.active {
+    background-color: rgb(35,35,35);
+    color: rgb(255, 183, 0);
+}
