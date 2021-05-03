@@ -1,4 +1,4 @@
-import { Asset } from "./asset.js"
+import { Asset, Com, Event, Theme } from "./common.js"
 import { Player } from "./player.js"
 
 class Main extends Phaser.Scene {
@@ -15,13 +15,20 @@ class Main extends Phaser.Scene {
         this.load.image(Asset.thrustLeft,'./res/thrust_left.png')
         this.load.image(Asset.thrustRight,'./res/thrust_right.png')
         this.load.image(Asset.thrustUp,'./res/thrust_up.png')
-    }
 
+        this.load.audio(Asset.soundGameOver,'./res/sounds/gameover.wav')
+        this.load.audio(Asset.soundHit,'./res/sounds/hit.wav')
+        this.load.audio(Asset.soundThrust,'./res/sounds/engine.wav')
+        this.load.audio(Asset.soundClick,'./res/sounds/click.wav')
+        this.load.audio(Asset.soundBGM,'./res/sounds/bgm.mp3')
+        this.load.audio(Asset.soundThrustStart, './res/sounds/engine-start.wav')
+    }
     player: Player // player container
     bgBack: Phaser.GameObjects.TileSprite // background parallax sprites
     bgBot: Phaser.GameObjects.TileSprite
     bgTop: Phaser.GameObjects.TileSprite
-    vel: number = 20 // overall rightwards velocity of the scene
+    /** overall rightwards velocity of the scene  */
+    vel: number = 20 
     edgeGlow: Phaser.GameObjects.Graphics[] = [] // glowing edges representing gravitational anomaly: top, right, bottom, left
     create() {
         let cam = this.cameras.main
@@ -47,18 +54,52 @@ class Main extends Phaser.Scene {
         this.edgeGlow[3] = this.add.graphics().setAlpha(0).setBlendMode(Phaser.BlendModes.SCREEN).setDepth(5)
             .fillGradientStyle(gColor,0,gColor,0,1,0,1,0)
             .fillRect(0,0,gWidth,cam.height)
-        this.add.tween({
-            targets: this.edgeGlow[0], duration: 1000, yoyo: true, alpha: 1, ease: 'Sine', loop: -1, repeatDelay: 2000
+        // init bgm
+        this.sound.play(Asset.soundBGM,{loop:true})
+        const introText = this.add.text(50,30,'',Theme.fontInfo).setOrigin(0)
+        const tAnim = Com.showTextAnim
+        let t = 0
+        this.time.delayedCall(t+=500,()=>
+            tAnim(introText,`3-1-5, you have reached target orbit around the station core.`
+                +`\nThe core already sustained heavy damage, so watch out for gravitational anomalies.`
+                +`\nWe are switching you to manual: fire your thrusters [W,A,S,D] to avoid crashing.`,4000))
+        let Vec2 = Phaser.Math.Vector2
+        this.time.delayedCall(t+=8000,()=>{
+            this.time.delayedCall(2000,()=>this.events.emit(Event.gravShift,new Vec2(0,0.5)))
+            tAnim(introText,`Anomaly detected towards orbit anti-normal. Thrust towards normal to compensate.`,1000)
+            this.time.delayedCall(2500,()=>tAnim(introText,`\nAdjust thrust acceleration for finer impulse control.`
+                +`\n[R] to increase, [F] to decrease, and [X] to match gravity level.`,1000,true))
         })
-        this.add.tween({
-            targets: this.edgeGlow[1], duration: 1000, yoyo: true, alpha: 1, ease: 'Sine', loop: -1, repeatDelay: 2000, delay: 1000
+        const glow = this.edgeGlow
+        const me = this
+        const hideAll = ()=>{
+            let toHide = []
+            glow.forEach(g=>{if (g.alpha>0) toHide.push(g)})
+            if (toHide.length>0) me.add.tween({targets:toHide,alpha:0,duration:1000,ease:'Sine'})
+        }
+        const show = (obj: Phaser.GameObjects.Graphics)=>{
+            me.add.tween({targets:obj,alpha:1,duration:1000,ease:'Sine'})
+        }
+        // handle grav shifts graphics
+        this.events.on(Event.gravShift,(vec:Phaser.Math.Vector2)=>{
+            hideAll()
+            const a = vec.angle()*180/Math.PI
+            let dir = Math.abs((a/90)-3)%4
+            show(glow[dir])
         })
-        this.add.tween({
-            targets: this.edgeGlow[2], duration: 1000, yoyo: true, alpha: 1, ease: 'Sine', loop: -1, repeatDelay: 2000, delay: 2000
+        // handle game over (player flies out of bounds)
+        this.events.once(Event.gameOver,(player:Player)=>{
+            me.player.update = ()=>{}
+            me.player.thrustController.destroy()
+            const score = player.traveled
+            let endText = me.add.text(cam.centerX,cam.centerY-50,`Game Over\nDistance: ${score.toFixed(1)}`,Theme.fontFocus)
+                .setOrigin(.5).setScale(2).setAlpha(0).setDepth(7)
+            me.tweens.add({ targets:endText, alpha:1, scale:1, duration:400, ease:'Sine', delay:500})
+            me.sound.play(Asset.soundGameOver)
+            me.player.destroy()
+            me.player = null
         })
-        this.add.tween({
-            targets: this.edgeGlow[3], duration: 1000, yoyo: true, alpha: 1, ease: 'Sine', loop: -1, repeatDelay: 2000, delay: 3000
-        })
+
     }
     phase: 'pre' | 'play' = 'play'
     update(time:number, delta:number) { 
@@ -67,7 +108,7 @@ class Main extends Phaser.Scene {
             this.bgBack.tilePositionX += this.vel/delta/20
             this.bgTop.tilePositionX += this.vel/delta
             this.bgBot.tilePositionX += this.vel/delta
-            this.player.update(time,delta)
+            if (this.player) this.player.update(time,delta)
         }
     }
 }

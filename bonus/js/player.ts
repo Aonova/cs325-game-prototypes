@@ -1,4 +1,4 @@
-import { Asset } from "./asset.js"
+import { Asset, DEBUG, Theme, Event, Com } from "./common.js"
 
 export class Player extends Phaser.GameObjects.Container {
     // Main player sprite
@@ -11,15 +11,12 @@ export class Player extends Phaser.GameObjects.Container {
     /** Global velocity, only to the right */
     gVel: number
     /** Gravity acceleration from anomalies */
-    gAccel: number = 0
-    /** Gravitational anomaly direction: -1=none, 0=up, 1=right, 2=down, 3=left */
-    gDir: number = -1
+    gAccel: Phaser.Math.Vector2 = new Phaser.Math.Vector2(0,0)
     /** Total units traveled */
     traveled: number = 0
-    /** The HUD text style object */
-    hudStyle =  {stroke:'#379',strokeThickness:4,fontSize:'14px',fontFamily:'monospace'}
     /** Thruster firing graphics. Indexed by firing direction: up, down, left, right */
     thrusters: Phaser.GameObjects.Image[] = []
+    hitBox: Phaser.GameObjects.Zone
     /** Must pass the initial global velocity */
     constructor(scene:Phaser.Scene, gVel:number) {
         super(scene,scene.cameras.main.centerX,scene.cameras.main.centerY)
@@ -37,9 +34,9 @@ export class Player extends Phaser.GameObjects.Container {
         this.thrustController = new ThrustController(scene,'thruster')
         this.thrustController.connectPlayer(this)
         // initialize hud elements
-        this.hud[1] = new Phaser.GameObjects.Text(scene,-120,-100,"debug",this.hudStyle)
+        this.hud[1] = new Phaser.GameObjects.Text(scene,-120,-100,"debug",Theme.fontHUD)
             .setOrigin(0,0)
-        this.hud[2] = new Phaser.GameObjects.Text(scene,70,-100,"debug",this.hudStyle)
+        this.hud[2] = new Phaser.GameObjects.Text(scene,70,-100,"debug",Theme.fontHUD)
             .setOrigin(0,0)
         this.setState('normal')
         // add objects to the container
@@ -48,19 +45,20 @@ export class Player extends Phaser.GameObjects.Container {
         // test
         this.scene.input.keyboard.addKey('SPACE').on('down',()=>{this.takeDamage(1000)})
         this.allowControl(true)
-        
+        this.hitBox = new Phaser.GameObjects.Zone(this.scene,0,0,90,160).setOrigin(.5)
+        this.add(this.hitBox)
+        if (DEBUG) this.add(new Phaser.GameObjects.Ellipse(this.scene,0,0,2,2,0xff0000,1).setOrigin(.5))
         scene.add.existing(this)
+        const me = this
+        scene.events.on(Event.gravShift,(vec:Phaser.Math.Vector2)=>{
+            scene.tweens.addCounter({
+                from:0,to:1,duration:2000,ease:'Sine',
+                onUpdate: tween=>me.gAccel = me.gAccel.lerp(vec,tween.getValue())
+            })
+        })
     }
     setGlobalVel(gVel:number):Player {
         this.gVel = gVel
-        return this
-    }
-    /** Updates gravitation anomaly effect.
-     *  @param gA the acceleration power of the anomaly
-     *  @param gD the direction of the anomaly (-1=none, 0=up, 1=right, 2=bot, 3=left)
-     */
-    setGrav(gA:number,gD:number):Player {
-        this.gAccel = gA
         return this
     }
     /** Allow keyboard inputs to affect the player entity if true. Turn on for gameplay, and off for on rails/cut-scene. Defaults to false.*/
@@ -79,16 +77,16 @@ export class Player extends Phaser.GameObjects.Container {
         }
         if (this.hud[1]!=null) { // update HUD text
             let xTerm = this.vel.x > 0 ? 'V_FWD|' : 'V_BCK|'
-            xTerm += this.state=='disabled' ? 'ERROR' : (Math.abs(this.vel.x)).toFixed(1)
+            xTerm += this.state=='disabled' ? 'ERROR' : (Math.abs(this.vel.x)*10).toFixed(1)
             let yTerm = this.vel.y > 0 ? 'V_DWN|' : 'V__UP|'
-            yTerm += this.state=='disabled' ? 'ERROR' : (Math.abs(this.vel.y)).toFixed(1)
+            yTerm += this.state=='disabled' ? 'ERROR' : (Math.abs(this.vel.y)*10).toFixed(1)
             this.hud[1].setText([xTerm,yTerm])
         }
         if (this.hud[2]!=null) {
             let xTerm = 'THRUST|'
-            xTerm += this.state=='disabled' ? 'ERROR' : (Math.abs(this.thrustController.getImpulse())).toFixed(1)
+            xTerm += this.state=='disabled' ? 'ERROR' : (Math.abs(this.thrustController.getImpulse())*10).toFixed(1)
             let yTerm = 'GRAVTY|'
-            yTerm += this.state=='disabled' ? 'ERROR' : (Math.abs(this.gAccel).toFixed(1))
+            yTerm += this.state=='disabled' ? 'ERROR' : (Math.abs(this.gAccel.length()*10).toFixed(1))
             this.hud[2].setText([xTerm,yTerm])
         }
         // reflect the change in velocity from thruster firing  
@@ -96,9 +94,17 @@ export class Player extends Phaser.GameObjects.Container {
         if (this.thrustController.isFiring("down")) this.vel.y += this.thrustController.getImpulse()/delta // downs
         if (this.thrustController.isFiring("left")) this.vel.x -= this.thrustController.getImpulse()/delta // left
         if (this.thrustController.isFiring("right")) this.vel.x += this.thrustController.getImpulse()/delta // right
+        // reflect the gravity effect on velocity
+        this.vel.x += this.gAccel.x/delta; this.vel.y += this.gAccel.y/delta 
         // reflect the change in position from current velocity
         this.setPosition(this.x + this.vel.x/delta, this.y + this.vel.y/delta)
-        this.traveled += this.gVel/delta
+        this.traveled += this.gVel*10/delta
+        // check for out of bounds
+        const Vector = Phaser.Math.Vector2
+        const cam = this.scene.cameras.main
+        if (new Vector(this.x-cam.centerX,this.y-cam.centerY).length()>cam.width*.75) {
+            this.scene.events.emit(Event.gameOver,this)
+        }
         super.update(time,delta)
     }
     setState(state:'normal'|'disabled') {
@@ -125,6 +131,7 @@ export class Player extends Phaser.GameObjects.Container {
     disabledTime: number
     /** Taking damage and disabling thrusters for a time */
     takeDamage(time:number) {
+        this.scene.sound.play(Asset.soundHit)
         if (time<5) return 
         this.setState("disabled")
         this.disabledTime+=time
@@ -138,12 +145,14 @@ class ThrustController extends Phaser.GameObjects.GameObject{
     keys: {[key:string]:Phaser.Input.Keyboard.Key}
     /** True if the thrusters are able to produce impulses. Defaults to true - affected by damage. */
     private working: boolean = true
+    /** playing thruster audio */
+    private thrustSound: Phaser.Sound.HTML5AudioSound
     /** Acceleration power of directional impulse thrusters (fired by w-a-s-d)*/
     private impulse: number = 1
     /** Firing state of thrusters in given direction: up, down, left, right */
     private firing: [boolean,boolean,boolean,boolean] = [false,false,false,false]
     /** Reference to player container under which this controller was initialized */
-    private player: Player
+    private player: Player = null
     /** Convert direction string to thruster pod index */
     private d2i(dir:'up'|'down'|'left'|'right'): integer {
         switch(dir) {
@@ -160,6 +169,8 @@ class ThrustController extends Phaser.GameObjects.GameObject{
     fire(dir:'up'|'down'|'left'|'right') {
         if (this.working) {
             this.firing[this.d2i(dir)] = true
+            this.scene.sound.play(Asset.soundThrustStart)
+            this.thrustSound.volume += .3
             this.scene.add.tween({
                 targets: this.player.thrusters[this.d2i(dir)],
                 alpha: 1,
@@ -169,7 +180,9 @@ class ThrustController extends Phaser.GameObjects.GameObject{
         return this
     }
     halt(dir:'up'|'down'|'left'|'right') {
+        if (!this.active) return
         this.firing[this.d2i(dir)] = false
+        this.thrustSound.volume -= .3
         this.scene.add.tween({
             targets: this.player.thrusters[this.d2i(dir)],
             alpha: 0,
@@ -187,6 +200,7 @@ class ThrustController extends Phaser.GameObjects.GameObject{
     }
     /** Enable or disable the thrusters. Also halts active thrust as expected. */
     setWorking(val: boolean) {
+        if (!this.active) return
         if (!val) this.haltAll()
         this.working = val
         if (val&&this.keysEnabled) { // on restore working thrusters, activate thrusters as per held keys
@@ -201,8 +215,28 @@ class ThrustController extends Phaser.GameObjects.GameObject{
         super(scene,tag)
         this.keys = {
             W: scene.input.keyboard.addKey('W'), A: scene.input.keyboard.addKey('A'),
-            S: scene.input.keyboard.addKey('S'), D: scene.input.keyboard.addKey('D')
+            S: scene.input.keyboard.addKey('S'), D: scene.input.keyboard.addKey('D'),
+            tUp: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R,true),
+            tDown: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F,true),
+            tSet: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X),
         }
+        const me = this
+        me.keys.tSet.on('down',()=>{
+            me.impulse = me.player.gAccel.length()
+        })
+        scene.events.on('update',(_,delta:number)=>{
+            if (!me.active) return
+            if (me.keys.tDown.isDown) me.impulse -= .025/delta
+            if (me.keys.tUp.isDown) me.impulse += .025/delta
+        })
+        this.thrustSound = <Phaser.Sound.HTML5AudioSound>scene.sound.add(Asset.soundThrust,{loop:true,volume:0})
+        this.thrustSound.play()
+    }
+    destroy() {
+        [this.keys.W,this.keys.S,this.keys.A,this.keys.D,this.keys.tSet].forEach(k=>{
+            k.off('down').off('up')
+        })
+        super.destroy()
     }
     /** Attach reference to player container */
     connectPlayer(player:Player) {
@@ -216,6 +250,7 @@ class ThrustController extends Phaser.GameObjects.GameObject{
             this.keys.S.on('down', ()=>{this.fire('down')}).on('up', ()=>{this.halt('down')})
             this.keys.A.on('down', ()=>{this.fire('left')}).on('up', ()=>{this.halt('left')})
             this.keys.D.on('down', ()=>{this.fire('right')}).on('up', ()=>{this.halt('right')})
+            
         } else {
             for (let key in this.keys){
                 this.keys[key].off('down').off('up')

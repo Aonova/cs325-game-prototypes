@@ -11,7 +11,7 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
-import { Asset } from "./asset.js";
+import { Asset, Com, Event, Theme } from "./common.js";
 import { Player } from "./player.js";
 var Main = (function (_super) {
     __extends(Main, _super);
@@ -31,8 +31,15 @@ var Main = (function (_super) {
         this.load.image(Asset.thrustLeft, './res/thrust_left.png');
         this.load.image(Asset.thrustRight, './res/thrust_right.png');
         this.load.image(Asset.thrustUp, './res/thrust_up.png');
+        this.load.audio(Asset.soundGameOver, './res/sounds/gameover.wav');
+        this.load.audio(Asset.soundHit, './res/sounds/hit.wav');
+        this.load.audio(Asset.soundThrust, './res/sounds/engine.wav');
+        this.load.audio(Asset.soundClick, './res/sounds/click.wav');
+        this.load.audio(Asset.soundBGM, './res/sounds/bgm.mp3');
+        this.load.audio(Asset.soundThrustStart, './res/sounds/engine-start.wav');
     };
     Main.prototype.create = function () {
+        var _this = this;
         var cam = this.cameras.main;
         this.bgBack = this.add.tileSprite(0, 0, cam.width, 0, Asset.bgBack).setOrigin(0);
         this.bgTop = this.add.tileSprite(0, -300, cam.width, 0, Asset.bgLower)
@@ -55,17 +62,50 @@ var Main = (function (_super) {
         this.edgeGlow[3] = this.add.graphics().setAlpha(0).setBlendMode(Phaser.BlendModes.SCREEN).setDepth(5)
             .fillGradientStyle(gColor, 0, gColor, 0, 1, 0, 1, 0)
             .fillRect(0, 0, gWidth, cam.height);
-        this.add.tween({
-            targets: this.edgeGlow[0], duration: 1000, yoyo: true, alpha: 1, ease: 'Sine', loop: -1, repeatDelay: 2000
+        this.sound.play(Asset.soundBGM, { loop: true });
+        var introText = this.add.text(50, 30, '', Theme.fontInfo).setOrigin(0);
+        var tAnim = Com.showTextAnim;
+        var t = 0;
+        this.time.delayedCall(t += 500, function () {
+            return tAnim(introText, "3-1-5, you have reached target orbit around the station core."
+                + "\nThe core already sustained heavy damage, so watch out for gravitational anomalies."
+                + "\nWe are switching you to manual: fire your thrusters [W,A,S,D] to avoid crashing.", 4000);
         });
-        this.add.tween({
-            targets: this.edgeGlow[1], duration: 1000, yoyo: true, alpha: 1, ease: 'Sine', loop: -1, repeatDelay: 2000, delay: 1000
+        var Vec2 = Phaser.Math.Vector2;
+        this.time.delayedCall(t += 8000, function () {
+            _this.time.delayedCall(2000, function () { return _this.events.emit(Event.gravShift, new Vec2(0, 0.5)); });
+            tAnim(introText, "Anomaly detected towards orbit anti-normal. Thrust towards normal to compensate.", 1000);
+            _this.time.delayedCall(2500, function () { return tAnim(introText, "\nAdjust thrust acceleration for finer impulse control."
+                + "\n[R] to increase, [F] to decrease, and [X] to match gravity level.", 1000, true); });
         });
-        this.add.tween({
-            targets: this.edgeGlow[2], duration: 1000, yoyo: true, alpha: 1, ease: 'Sine', loop: -1, repeatDelay: 2000, delay: 2000
+        var glow = this.edgeGlow;
+        var me = this;
+        var hideAll = function () {
+            var toHide = [];
+            glow.forEach(function (g) { if (g.alpha > 0)
+                toHide.push(g); });
+            if (toHide.length > 0)
+                me.add.tween({ targets: toHide, alpha: 0, duration: 1000, ease: 'Sine' });
+        };
+        var show = function (obj) {
+            me.add.tween({ targets: obj, alpha: 1, duration: 1000, ease: 'Sine' });
+        };
+        this.events.on(Event.gravShift, function (vec) {
+            hideAll();
+            var a = vec.angle() * 180 / Math.PI;
+            var dir = Math.abs((a / 90) - 3) % 4;
+            show(glow[dir]);
         });
-        this.add.tween({
-            targets: this.edgeGlow[3], duration: 1000, yoyo: true, alpha: 1, ease: 'Sine', loop: -1, repeatDelay: 2000, delay: 3000
+        this.events.once(Event.gameOver, function (player) {
+            me.player.update = function () { };
+            me.player.thrustController.destroy();
+            var score = player.traveled;
+            var endText = me.add.text(cam.centerX, cam.centerY - 50, "Game Over\nDistance: " + score.toFixed(1), Theme.fontFocus)
+                .setOrigin(.5).setScale(2).setAlpha(0).setDepth(7);
+            me.tweens.add({ targets: endText, alpha: 1, scale: 1, duration: 400, ease: 'Sine', delay: 500 });
+            me.sound.play(Asset.soundGameOver);
+            me.player.destroy();
+            me.player = null;
         });
     };
     Main.prototype.update = function (time, delta) {
@@ -73,7 +113,8 @@ var Main = (function (_super) {
             this.bgBack.tilePositionX += this.vel / delta / 20;
             this.bgTop.tilePositionX += this.vel / delta;
             this.bgBot.tilePositionX += this.vel / delta;
-            this.player.update(time, delta);
+            if (this.player)
+                this.player.update(time, delta);
         }
     };
     return Main;
