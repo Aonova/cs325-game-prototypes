@@ -16,7 +16,7 @@ export class Player extends Phaser.GameObjects.Container {
     traveled: number = 0
     /** Thruster firing graphics. Indexed by firing direction: up, down, left, right */
     thrusters: Phaser.GameObjects.Image[] = []
-    hitBox: Phaser.GameObjects.Zone
+    hitBox: Phaser.GameObjects.Rectangle
     /** Must pass the initial global velocity */
     constructor(scene:Phaser.Scene, gVel:number) {
         super(scene,scene.cameras.main.centerX,scene.cameras.main.centerY)
@@ -45,11 +45,12 @@ export class Player extends Phaser.GameObjects.Container {
         // test
         this.scene.input.keyboard.addKey('SPACE').on('down',()=>{this.takeDamage(1000)})
         this.allowControl(true)
-        this.hitBox = new Phaser.GameObjects.Zone(this.scene,0,0,90,160).setOrigin(.5)
+        this.hitBox = new Phaser.GameObjects.Rectangle(this.scene,0,0,90,160,0,0).setOrigin(.5)
+        if (DEBUG) this.hitBox.setStrokeStyle(1,0xff0000,1)
         this.add(this.hitBox)
-        if (DEBUG) this.add(new Phaser.GameObjects.Ellipse(this.scene,0,0,2,2,0xff0000,1).setOrigin(.5))
         scene.add.existing(this)
         const me = this
+        me.mech.tintFill = false
         scene.events.on(Event.gravShift,(vec:Phaser.Math.Vector2)=>{
             scene.tweens.addCounter({
                 from:0,to:1,duration:2000,ease:'Sine',
@@ -131,6 +132,7 @@ export class Player extends Phaser.GameObjects.Container {
     disabledTime: number
     /** Taking damage and disabling thrusters for a time */
     takeDamage(time:number) {
+        if (!this.scene) return
         this.scene.sound.play(Asset.soundHit)
         if (time<5) return 
         this.setState("disabled")
@@ -168,12 +170,14 @@ class ThrustController extends Phaser.GameObjects.GameObject{
     }
     fire(dir:'up'|'down'|'left'|'right') {
         if (this.working) {
+            const me = this
             this.firing[this.d2i(dir)] = true
-            this.scene.sound.play(Asset.soundThrustStart)
-            this.thrustSound.volume += .3
+            this.scene.sound.play(Asset.soundThrustStart,
+                {volume:Math.min(1,me.impulse*1.8)})
+            this.thrustSound.setVolume( Math.min(this.thrustSound.volume+1,1) )
             this.scene.add.tween({
                 targets: this.player.thrusters[this.d2i(dir)],
-                alpha: 1,
+                alpha: Math.min(1,me.impulse*1.8),
                 duration: 300,
             })
         }
@@ -182,7 +186,8 @@ class ThrustController extends Phaser.GameObjects.GameObject{
     halt(dir:'up'|'down'|'left'|'right') {
         if (!this.active) return
         this.firing[this.d2i(dir)] = false
-        this.thrustSound.volume -= .3
+        if (!(this.isFiring('up')||this.isFiring('down')||this.isFiring('left')||this.isFiring('right')))
+            this.thrustSound.setVolume(0)
         this.scene.add.tween({
             targets: this.player.thrusters[this.d2i(dir)],
             alpha: 0,

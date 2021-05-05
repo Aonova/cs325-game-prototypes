@@ -1,4 +1,5 @@
-import { Asset, Com, Event, Theme } from "./common.js"
+import { Asset, Com, Event, Theme, Settings } from "./common.js"
+import { Plasma } from "./plasma.js"
 import { Player } from "./player.js"
 
 class Main extends Phaser.Scene {
@@ -15,6 +16,7 @@ class Main extends Phaser.Scene {
         this.load.image(Asset.thrustLeft,'./res/thrust_left.png')
         this.load.image(Asset.thrustRight,'./res/thrust_right.png')
         this.load.image(Asset.thrustUp,'./res/thrust_up.png')
+        this.load.image(Asset.plasma,'./res/particle.png')
 
         this.load.audio(Asset.soundGameOver,'./res/sounds/gameover.wav')
         this.load.audio(Asset.soundHit,'./res/sounds/hit.wav')
@@ -30,8 +32,13 @@ class Main extends Phaser.Scene {
     /** overall rightwards velocity of the scene  */
     vel: number = 20 
     edgeGlow: Phaser.GameObjects.Graphics[] = [] // glowing edges representing gravitational anomaly: top, right, bottom, left
+    /** Current anomaly state: 0 is none, 1-4 are different directions. Used only to generate the next one.*/
+    gravState = 0
+    /** Plasma object group on screen */
+    plasma: Phaser.GameObjects.Group
     create() {
         let cam = this.cameras.main
+        const me = this
         this.bgBack = this.add.tileSprite(0,0,cam.width,0,Asset.bgBack).setOrigin(0)
         this.bgTop = this.add.tileSprite(0,-300,cam.width,0,Asset.bgLower)
             .setOrigin(0,0).setTileScale(0.65).setFlipY(true)
@@ -40,7 +47,7 @@ class Main extends Phaser.Scene {
         this.bgBot.tilePositionX += 2500 // shift it over for variance with top
         this.player = this.add.existing(new Player(this,this.vel))
         // init edge glow graphics
-        let gColor = 0x004010
+        let gColor = Theme.gravColor
         let gWidth = 200
         this.edgeGlow[0] = this.add.graphics().setAlpha(0).setBlendMode(Phaser.BlendModes.SCREEN).setDepth(5)
             .fillGradientStyle(gColor,gColor,0,0,1,1,0,0)
@@ -56,6 +63,11 @@ class Main extends Phaser.Scene {
             .fillRect(0,0,gWidth,cam.height)
         // init bgm
         this.sound.play(Asset.soundBGM,{loop:true})
+        // init plasma
+        this.plasma = this.add.group([],{
+            classType:Plasma, runChildUpdate:true, visible:true, 
+            createCallback: (p:Plasma)=>p.setPlayer(me.player),
+        })
         const introText = this.add.text(50,30,'',Theme.fontInfo).setOrigin(0)
         const tAnim = Com.showTextAnim
         let t = 0
@@ -65,13 +77,35 @@ class Main extends Phaser.Scene {
                 +`\nWe are switching you to manual: fire your thrusters [W,A,S,D] to avoid crashing.`,4000))
         let Vec2 = Phaser.Math.Vector2
         this.time.delayedCall(t+=8000,()=>{
-            this.time.delayedCall(2000,()=>this.events.emit(Event.gravShift,new Vec2(0,0.5)))
+            me.time.delayedCall(2000,()=>this.events.emit(Event.gravShift,new Vec2(0,0.5)))
             tAnim(introText,`Anomaly detected towards orbit anti-normal. Thrust towards normal to compensate.`,1000)
-            this.time.delayedCall(2500,()=>tAnim(introText,`\nAdjust thrust acceleration for finer impulse control.`
+            me.time.delayedCall(4500,()=>tAnim(introText,`\nAdjust thrust acceleration for finer impulse control.`
                 +`\n[R] to increase, [F] to decrease, and [X] to match gravity level.`,1000,true))
         })
+        this.time.delayedCall(t+=8000,()=>{
+            me.events.emit(Event.gravShift, new Vec2(0,0))
+            tAnim(introText,`Anomaly receding.`
+                + `\nGravity anomalies can appear at any time and direction.`
+                + `\nBe vigilant for the signature green glow, and compensate using your thrusters.`,2000)
+            me.time.delayedCall(2000,()=>doGravShift())
+        })
+        this.time.delayedCall(t+=8000,()=>{
+            tAnim(introText,`Detecting plasma debris in your orbit - probably being spewed out by the core.`
+                + `\nThey wont pierce your hull, but will give your systems a nasty shock.`
+                + `\nEvasive manuevers recommended.`,2000)
+            me.time.delayedCall(3000,()=>{
+                for (let i=0;i<10;i++) me.time.delayedCall(Com.randRange(0,2000),()=>me.plasma.get())
+            })
+        })
+        this.time.delayedCall(t+=8000,()=>{
+            tAnim(introText,`Try and stay in orbit as long as possible.`
+                + `\nBest of luck, Theta-315`,800)
+            doPlasmaSpawn()
+        })
+        this.time.delayedCall(t+=8000,()=>introText.setText(''))
+
         const glow = this.edgeGlow
-        const me = this
+        
         const hideAll = ()=>{
             let toHide = []
             glow.forEach(g=>{if (g.alpha>0) toHide.push(g)})
@@ -80,12 +114,40 @@ class Main extends Phaser.Scene {
         const show = (obj: Phaser.GameObjects.Graphics)=>{
             me.add.tween({targets:obj,alpha:1,duration:1000,ease:'Sine'})
         }
+        /** Start doing random plasma spawns */
+        const doPlasmaSpawn = ()=>{
+            const delay = (Com.randRange(500,1500))
+            me.time.delayedCall(delay,()=>{
+                let p1:Plasma = me.plasma.get() // spawn new plasma
+                let p2:Plasma = null
+                if (Math.random()<.5) p2 = me.plasma.get() // 50% chance to spawn another
+                if (!p1.active) p1.reset()
+                if (p2 && !p2.active) p2.reset()
+                doPlasmaSpawn() // recurse
+            })
+        }
+        /** Start doing random grav shifts in random intervals (according to settings) */
+        const doGravShift = ()=>{
+            let dir = 0; do {
+                dir = Math.floor(Math.random()*5)
+            } while (dir==me.gravState) // choose a new grav direction
+            me.gravState = dir
+            const gVec = new Vec2()
+            if (dir==0) gVec.set(0,0)
+            else gVec.set(1,0).rotate((dir-1)/2*Math.PI).scale(Com.randRange(.25,.75))
+            const gd = Settings.gravDelay
+            const delay = ((Math.random()*(gd.max-gd.min))+gd.min)*1000
+            me.time.delayedCall(delay,()=>{
+                me.events.emit(Event.gravShift,gVec)
+                doGravShift() // set up the next grav shift
+            })
+        }
         // handle grav shifts graphics
         this.events.on(Event.gravShift,(vec:Phaser.Math.Vector2)=>{
             hideAll()
-            const a = vec.angle()*180/Math.PI
-            let dir = Math.abs((a/90)-3)%4
-            show(glow[dir])
+            if (vec.length()==0) return
+            const a = vec.angle()/Math.PI*2
+            show(glow[(Math.floor(a+1.5))%4])
         })
         // handle game over (player flies out of bounds)
         this.events.once(Event.gameOver,(player:Player)=>{
@@ -98,6 +160,14 @@ class Main extends Phaser.Scene {
             me.sound.play(Asset.soundGameOver)
             me.player.destroy()
             me.player = null
+        })
+        // Called by plasma when it hits a player
+        this.events.on(Event.playerHit,(player:Player,plasma:Plasma)=>{
+            me.add.tween({
+                targets:plasma, alpha:0, scale:'*=1.5', ease:'Sine', duration:600,
+                onComplete: ()=>{plasma}
+            })
+            player.takeDamage(1000)
         })
 
     }

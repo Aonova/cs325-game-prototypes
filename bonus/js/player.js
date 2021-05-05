@@ -40,12 +40,13 @@ var Player = (function (_super) {
         _this.sendToBack(_this.thrusters[2]);
         _this.scene.input.keyboard.addKey('SPACE').on('down', function () { _this.takeDamage(1000); });
         _this.allowControl(true);
-        _this.hitBox = new Phaser.GameObjects.Zone(_this.scene, 0, 0, 90, 160).setOrigin(.5);
-        _this.add(_this.hitBox);
+        _this.hitBox = new Phaser.GameObjects.Rectangle(_this.scene, 0, 0, 90, 160, 0, 0).setOrigin(.5);
         if (DEBUG)
-            _this.add(new Phaser.GameObjects.Ellipse(_this.scene, 0, 0, 2, 2, 0xff0000, 1).setOrigin(.5));
+            _this.hitBox.setStrokeStyle(1, 0xff0000, 1);
+        _this.add(_this.hitBox);
         scene.add.existing(_this);
         var me = _this;
+        me.mech.tintFill = false;
         scene.events.on(Event.gravShift, function (vec) {
             scene.tweens.addCounter({
                 from: 0, to: 1, duration: 2000, ease: 'Sine',
@@ -126,6 +127,8 @@ var Player = (function (_super) {
         after();
     };
     Player.prototype.takeDamage = function (time) {
+        if (!this.scene)
+            return;
         this.scene.sound.play(Asset.soundHit);
         if (time < 5)
             return;
@@ -182,12 +185,13 @@ var ThrustController = (function (_super) {
     };
     ThrustController.prototype.fire = function (dir) {
         if (this.working) {
+            var me = this;
             this.firing[this.d2i(dir)] = true;
-            this.scene.sound.play(Asset.soundThrustStart);
-            this.thrustSound.volume += .3;
+            this.scene.sound.play(Asset.soundThrustStart, { volume: Math.min(1, me.impulse * 1.8) });
+            this.thrustSound.setVolume(Math.min(this.thrustSound.volume + 1, 1));
             this.scene.add.tween({
                 targets: this.player.thrusters[this.d2i(dir)],
-                alpha: 1,
+                alpha: Math.min(1, me.impulse * 1.8),
                 duration: 300
             });
         }
@@ -197,7 +201,8 @@ var ThrustController = (function (_super) {
         if (!this.active)
             return;
         this.firing[this.d2i(dir)] = false;
-        this.thrustSound.volume -= .3;
+        if (!(this.isFiring('up') || this.isFiring('down') || this.isFiring('left') || this.isFiring('right')))
+            this.thrustSound.setVolume(0);
         this.scene.add.tween({
             targets: this.player.thrusters[this.d2i(dir)],
             alpha: 0,
